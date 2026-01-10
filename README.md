@@ -90,7 +90,13 @@ We support the best high-performance server software out of the box:
 ## 🚀 Getting Started
 
 1.  **Download**: Grab the latest `MineServer_x64-setup.exe` from the [Releases](https://github.com/MF9CODING/Mineserver/releases) page.
-2.  **Install**: Run the installer (it's signed and safe!).
+2.  **Install**: Run the installer.
+    > 🛡️ **Security Warning? Don't Panic!**
+    > You will likely see a **"Windows protected your PC"** popup. This happens because MineServer is a new open-source app and doesn't have an expensive corporate certificate yet.
+    >
+    > **To Install:**
+    > 1. Click **<u>More info</u>** (the underlined text).
+    > 2. Click the **Run anyway** button.
 3.  **Create**: Click "Create Server", choose "Paper" (recommended), and hit "Start".
 4.  **Play**: Copy the IP address shown in the Network tab and join!
 
