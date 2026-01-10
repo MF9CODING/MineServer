@@ -3,91 +3,128 @@
 ![Mineserver Logo](https://raw.githubusercontent.com/MF9CODING/Mineserver/main/src-tauri/icons/icon.png)
 
 # MineServer
-### The Modern, High-Performance Minecraft Server Manager
+### Protocol 1: Protect the Pilot. Protocol 2: Run the Server.
+**The modern, lightning-fast Minecraft Server Manager you've been waiting for.**
 
-[![Reliability](https://img.shields.io/badge/Status-Stable-green?style=for-the-badge)](https://github.com/MF9CODING/Mineserver)
-[![Rust](https://img.shields.io/badge/Built_With-Rust-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
-[![Tauri](https://img.shields.io/badge/Powered_By-Tauri_v2-blue?style=for-the-badge&logo=tauri)](https://tauri.app/)
-[![React](https://img.shields.io/badge/Frontend-React_+_Tailwind-cyan?style=for-the-badge&logo=react)](https://react.dev/)
+[![Status](https://img.shields.io/badge/Status-Stable-green?style=for-the-badge&logo=github)](https://github.com/MF9CODING/Mineserver)
+[![Downloads](https://img.shields.io/github/downloads/MF9CODING/Mineserver/total?style=for-the-badge&color=orange)](https://github.com/MF9CODING/Mineserver/releases)
+[![Built With Rust](https://img.shields.io/badge/Backend-Rust-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Powered By Tauri](https://img.shields.io/badge/Native-Tauri_v2-blue?style=for-the-badge&logo=tauri)](https://tauri.app/)
 
-**MineServer** is a next-generation Minecraft Server Management tool designed for performance, security, and ease of use. Built with **Rust** and **Tauri**, it provides a lightning-fast, resource-efficient alternative to Electron-based launchers.
-
-[**Download Latest Release**](https://github.com/MF9CODING/Mineserver/releases/latest) • [**Report Bug**](https://github.com/MF9CODING/Mineserver/issues)
+[**Download for Windows**](https://github.com/MF9CODING/Mineserver/releases/latest) • [**View Changelog**](https://github.com/MF9CODING/Mineserver/releases) • [**Report Bug**](https://github.com/MF9CODING/Mineserver/issues)
 
 ---
 </div>
 
-## ✨ Key Features
+## 👋 Introduction
 
-### 🚀 High-Performance Core
-- **Native Performance**: Built on Rust backend for minimal resource usage (<50MB RAM idle).
-- **Multi-Platform Support**: Run Vanilla, Paper, Purpur, Spigot, Forge, Fabric, Bedrock (BDS), and **NukkitX**.
-- **Real-time Stats**: Live CPU, RAM, and Disk usage monitoring.
+Welcome to **MineServer**. We believe running a Minecraft server shouldn't require a degree in networking or hours of config file editing. Whether you're a parent setting up a world for your kids, a streamer playing with viewers, or a power user managing a modded SMP, MineServer is built for **you**.
 
-### 🎮 Advanced Server Management
-- **Dashboard**: Beautiful, glass-morphic UI with real-time graphs and status indicators.
-- **Wizard**: Easy 3-step server creation wizard with hardware detection.
-- **Versions**: Automatic fetching of all Minecraft versions (1.16+ to Latest snapshot).
-- **Console**: Premium terminal with command history, search, and auto-scroll.
+Powered by **Rust** 🦀 and **Tauri** 🚀, it's incredibly lightweight (using less RAM than a web browser tab) while giving you professional-grade tools wrapped in a beautiful, modern interface.
 
-### 🔌 Plugin & Mod Manager
-- **Integrated Browser**: Search and install plugins directly from **Modrinth**, **Hangar**, **SpigotMC**, and **Polymart**.
-- **One-Click Install**: Automatically downloads and places jars in the correct folder.
-- **Updates**: Check for updates and manage installed addons.
+## 🌟 Why MineServer?
 
-### 🌍 World Management
-- **Multi-World Support**: Create, delete, and switch between worlds easily.
-- **Regenerator**: Advanced world generation wizard (Seeds, Level Types).
-- **Drag & Drop Upload**: Upload `.zip` or `.mcworld` files directly to import worlds.
-- **Dimension Control**: Manage Overworld, Nether, and End dimensions separately.
+### 🚀 **Performance First**
+Forget clunky Electron apps that eat your RAM. MineServer is native. It opens instantly, runs silently in the background, and leaves your system resources free for what matters—gaming.
 
-### 🛡️ Security & Privacy (Guardian)
-- **Tunnel Guard**: Block unauthorized connections when using tunnels.
-- **Streamer Mode**: One-click toggles to hide IPs and sensitive info from the UI.
-- **Panic Button**: Instantly whitelist-lock the server and kick unknown players.
+### 🛡️ **Security Center (Guardian)**
+We take security seriously. With features like **Tunnel Guard**, we actively monitor connections to ensure your home network stays safe while you play with friends. The built-in **Panic Mode** lets you instantly lock down your server if griefers join.
 
-### 🌐 Network & Connectivity
-- **Playit.gg Integration**: Built-in support for tunneling (no port forwarding required).
-- **UPnP**: Automatic port forwarding for supported routers.
-- **Local LAN**: Instant LAN IP display for home networks.
-
-### 📂 File System
-- **File Manager**: Full-featured explorer with icons, sorting, and search.
-- **Editor**: Syntax-highlighted code editor for YAML, JSON, and Properties files.
-- **Archive/Extract**: Zip and Unzip backups directly within the app.
+### 🎥 **Streamer Friendly**
+Streaming? Turn on **Streamer Mode** to automatically mask your Public IP, coordinates, and sensitive server details from your dashboard. Show your screen without fear of leaking your IP.
 
 ---
 
-## 🛠️ Tech Stack
+## 🔥 Key Features
 
-- **Backend**: Rust (Tauri v2)
-- **Frontend**: React 18, TypeScript, Vite
-- **Styling**: TailwindCSS, Framer Motion
-- **State Management**: Zustand
-- **Icons**: Lucide React
+### �️ **Server Management**
+- **Smart Creation Wizard**: Automatically detects your hardware (CPU/RAM) to recommend the perfect settings.
+- **Multi-Platform Support**: Run anything from **Vanilla** and **Paper** (Java) to **Bedrock (BDS)** and **NukkitX**.
+- **Version Manager**: One-click install for ANY Minecraft version, from 1.16 to the latest Snapshot.
+- **Live Console**: A premium terminal experience with color-coded logs, command history, and auto-scroll.
 
-## 📥 Installation
+### 🌍 **Networking Made Easy**
+- **No Port Forwarding? No Problem**: Built-in support for **Playit.gg** tunneling means you can let friends join without touching your router settings.
+- **UPnP Support**: Automatically opens ports on compatible routers for a direct connection.
+- **Lan Mode**: Instantly shows your local IP for family play.
 
-1. Go to the [**Releases Page**](https://github.com/MF9CODING/Mineserver/releases).
-2. Download the installer for your platform (`MineServer_x64-setup.exe` for Windows).
-3. Run the installer and launch MineServer.
+### 🧩 **Plugin & Mod Powerhouse**
+- **Integrated App Store**: Browse, search, and install thousands of plugins directly from **Modrinth**, **Hangar**, **SpigotMC**, and **Polymart**.
+- **Safe Installs**: We automatically place files in the right folders (plugins/mods) so you don't have to.
+- **Nukkit Support**: Full support for installing plugins on Nukkit servers.
 
-## 🤝 Contributing
+### 🗺️ **World Command Center**
+- **Visual Manager**: See your worlds with beautiful cards, not just folder names.
+- **Regenerator**: Don't like your seed? Regenerate the world with a new seed and level type (Flat, Amplified, etc.) in seconds.
+- **Dimension Control**: Upload or delete specific dimensions (Nether/End) without wiping the whole server.
+- **Drag & Drop Import**: Drag a `.zip` or `.mcworld` file into the app to instantly import a world.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### � **Pro File Manager**
+- **Code Editor**: A built-in editor with syntax highlighting for YAML, JSON, and Properties files. Fix configs without leaving the app.
+- **Archive & Backup**: Zip up your server for safekeeping or extract downloaded backups with one click.
+- **Recursive Uploads**: Upload entire folders seamlessly.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+---
 
-## 📄 License
+## 💻 Supported Software
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+We support the best high-performance server software out of the box:
+
+| Platform | Type | Best For | Status |
+|----------|------|----------|--------|
+| **Paper** | Java | 🚀 High Performance & Plugins | ✅ Supported |
+| **Purpur** | Java | ⚙️ Extreme Customization | ✅ Supported |
+| **Vanilla** | Java | 🍦 Pure Experience | ✅ Supported |
+| **Fabric** | Java | 🛠️ Mods (Lightweight) | ✅ Supported |
+| **Forge** | Java | 🏗️ Heavy Modpacks | ✅ Supported |
+| **Bedrock** | Bedrock | 📱 Cross-play w/ Consoles | ✅ Supported |
+| **NukkitX** | Bedrock | 🔌 Bedrock with Plugins | ✅ Supported |
+
+---
+
+## � Screenshots
+
+*(Screenshots coming soon - Imagine a sleek, dark-themed UI that looks like it's from 2030)*
+
+---
+
+## 🚀 Getting Started
+
+1.  **Download**: Grab the latest `MineServer_x64-setup.exe` from the [Releases](https://github.com/MF9CODING/Mineserver/releases) page.
+2.  **Install**: Run the installer (it's signed and safe!).
+3.  **Create**: Click "Create Server", choose "Paper" (recommended), and hit "Start".
+4.  **Play**: Copy the IP address shown in the Network tab and join!
+
+---
+
+## ❓ FAQ
+
+**Q: Is this free?**
+A: Yes! MineServer is 100% free and open source.
+
+**Q: Can I run a server for my friends on my PC?**
+A: Absolutely. MineServer is designed exactly for that. Use the "Playit" tunnel feature if you can't port forward.
+
+**Q: Does it support bedrock players?**
+A: Yes! You can run a dedicated Bedrock server (BDS) or use NukkitX for plugin support.
+
+---
+
+## ❤️ Contributing
+
+We love the community! If you're a developer (Rust/React), come help us build the future of server management.
+
+1.  Fork the repo.
+2.  Create a branch (`git checkout -b feature/cool-thing`).
+3.  Commit changes.
+4.  Open a Pull Request!
 
 ---
 
 <div align="center">
-Made with ❤️ by MF9CODING
+
+**Built with ❤️ by MF9CODING**
+
+*Not affiliated with Mojang or Microsoft.*
+
 </div>
