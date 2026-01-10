@@ -25,6 +25,8 @@ interface VersionInfo {
     gameVersions: string[];
     loaders: string[];
     downloadUrl: string;
+    datePublished?: string;
+    versionType?: string;
 }
 
 // Plugin sources for Java servers
@@ -72,9 +74,20 @@ export function PluginManager({ server }: PluginManagerProps) {
         try {
             let results: PluginResult[] = [];
 
+            interface PaginatedResult<T> {
+                items: T[];
+                total: number;
+            }
+
+            // ... inside loadPlugins ...
+
             if (activeSource === 'modrinth') {
-                const modrinthResults = await invoke<any[]>('search_modrinth_plugins', { query });
-                results = modrinthResults.map(p => ({
+                const modrinthResults = await invoke<PaginatedResult<any>>('search_modrinth_plugins', {
+                    query,
+                    offset: (currentPage - 1) * pluginsPerPage
+                });
+
+                results = modrinthResults.items.map(p => ({
                     id: p.project_id,
                     slug: p.slug,
                     title: p.title,
@@ -83,7 +96,8 @@ export function PluginManager({ server }: PluginManagerProps) {
                     icon_url: p.icon_url,
                     source: 'modrinth' as const
                 }));
-                setTotalPages(Math.ceil(100 / pluginsPerPage)); // Modrinth has many plugins
+                // Real pagination logic!
+                setTotalPages(Math.ceil(modrinthResults.total / pluginsPerPage));
             } else if (activeSource === 'hangar') {
                 results = await invoke<PluginResult[]>('search_hangar_plugins', { query });
                 setTotalPages(5);
@@ -127,7 +141,7 @@ export function PluginManager({ server }: PluginManagerProps) {
             // Fetch versions for this plugin
             const versionData = await invoke<VersionInfo[]>('get_plugin_versions', {
                 source: plugin.source,
-                project_id: plugin.id,
+                projectId: plugin.id,
                 slug: plugin.slug
             });
             setVersions(versionData);
@@ -154,22 +168,22 @@ export function PluginManager({ server }: PluginManagerProps) {
         try {
             if (selectedPlugin.source === 'modrinth') {
                 await invoke('install_modrinth_plugin', {
-                    project_id: selectedPlugin.id,
-                    server_path: server.path
+                    projectId: selectedPlugin.id,
+                    serverPath: server.path
                 });
             } else if (selectedPlugin.source === 'hangar') {
                 await invoke('install_hangar_plugin', {
                     slug: selectedPlugin.slug,
-                    server_path: server.path
+                    serverPath: server.path
                 });
             } else if (selectedPlugin.source === 'spigot') {
                 await invoke('install_spigot_plugin', {
-                    resource_id: selectedPlugin.id,
-                    server_path: server.path
+                    resourceId: selectedPlugin.id,
+                    serverPath: server.path
                 });
                 await invoke('install_spigot_plugin', {
-                    resource_id: selectedPlugin.id,
-                    server_path: server.path
+                    resourceId: selectedPlugin.id,
+                    serverPath: server.path
                 });
             }
             toast.success(`${selectedPlugin.title} installed!`);
@@ -212,37 +226,42 @@ export function PluginManager({ server }: PluginManagerProps) {
         }
 
         return (
-            <div className="flex items-center justify-center gap-2 py-4 border-t border-border/50">
-                <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded-lg bg-surface hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                    <ChevronLeft className="w-4 h-4 text-text-muted" />
-                </button>
-
-                {pages.map(page => (
+            <div className="flex flex-col items-center gap-2 py-4 border-t border-border/50">
+                <span className="text-xs text-text-muted">
+                    Page {currentPage} of {totalPages}
+                </span>
+                <div className="flex items-center justify-center gap-2">
                     <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={cn(
-                            "w-9 h-9 rounded-lg font-bold text-sm transition-all",
-                            currentPage === page
-                                ? "bg-primary text-white shadow-lg shadow-primary/30"
-                                : "bg-surface hover:bg-surface-hover text-text-muted hover:text-white"
-                        )}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-lg bg-surface hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {page}
+                        <ChevronLeft className="w-4 h-4 text-text-muted" />
                     </button>
-                ))}
 
-                <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg bg-surface hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                    <ChevronRight className="w-4 h-4 text-text-muted" />
-                </button>
+                    {pages.map(page => (
+                        <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className={cn(
+                                "w-9 h-9 rounded-lg font-bold text-sm transition-all",
+                                currentPage === page
+                                    ? "bg-primary text-white shadow-lg shadow-primary/30"
+                                    : "bg-surface hover:bg-surface-hover text-text-muted hover:text-white"
+                            )}
+                        >
+                            {page}
+                        </button>
+                    ))}
+
+                    <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-lg bg-surface hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <ChevronRight className="w-4 h-4 text-text-muted" />
+                    </button>
+                </div>
             </div>
         );
     };
@@ -453,10 +472,22 @@ export function PluginManager({ server }: PluginManagerProps) {
                                                     <span className="text-purple-400 font-bold text-xs">v</span>
                                                 </div>
                                                 <div className="text-left">
-                                                    <div className="font-bold text-white">{version.name}</div>
-                                                    <div className="text-xs text-text-muted">
-                                                        MC: {version.gameVersions.slice(0, 4).join(', ')}
-                                                        {version.gameVersions.length > 4 && ` +${version.gameVersions.length - 4}`}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-bold text-white">{version.name}</div>
+                                                        <span className={cn(
+                                                            "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded",
+                                                            version.versionType === 'release' ? "bg-green-500/20 text-green-400" :
+                                                                version.versionType === 'beta' ? "bg-orange-500/20 text-orange-400" :
+                                                                    "bg-white/10 text-text-muted"
+                                                        )}>
+                                                            {version.versionType || 'Release'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-text-muted flex gap-2">
+                                                        <span>MC: {version.gameVersions.slice(0, 4).join(', ')}{version.gameVersions.length > 4 && ` +${version.gameVersions.length - 4}`}</span>
+                                                        {version.datePublished && (
+                                                            <span>• {new Date(version.datePublished).toLocaleDateString()}</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

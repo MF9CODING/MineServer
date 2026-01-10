@@ -107,40 +107,61 @@ export function SecurityManager({ server }: SecurityManagerProps) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Windows Firewall */}
                 <div className={cn(
-                    "border rounded-2xl p-6 relative overflow-hidden transition-all",
-                    firewallStatus === 'active' ? "bg-orange-500/5 border-orange-500/30" : "bg-[#161b22] border-red-500/30"
+                    "border rounded-2xl p-6 relative overflow-hidden transition-all group",
+                    firewallStatus === 'active'
+                        ? "bg-gradient-to-br from-orange-500/5 to-red-500/5 border-orange-500/30"
+                        : "bg-[#161b22] border-red-500/50 shadow-lg shadow-red-500/5"
                 )}>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="font-bold text-white flex items-center gap-2">
-                            <Flame className="w-5 h-5 text-orange-400" /> Windows Firewall
+                            <Flame className={cn("w-5 h-5", firewallStatus === 'active' ? "text-orange-400" : "text-red-500")} />
+                            Windows Firewall
                         </h3>
                         {firewallStatus === 'active' ? (
                             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold">
-                                <Check className="w-3 h-3" /> Protected
+                                <Check className="w-3 h-3" /> Public Access Open
                             </div>
                         ) : (
-                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold animate-pulse">
-                                <AlertTriangle className="w-3 h-3" /> Action Needed
+                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                                <AlertTriangle className="w-3 h-3" /> Action Required
                             </div>
                         )}
                     </div>
-                    <p className="text-sm text-text-muted mb-4 h-10">
-                        Ensures your server port ({server.port}) is open to the public internet so friends can join.
-                        <br /><span className="text-orange-400/70 text-xs mt-1 block">Default Windows settings often block this.</span>
+
+                    <p className="text-sm text-text-muted mb-6 h-12 leading-relaxed">
+                        {firewallStatus === 'active'
+                            ? <span>Your server port (<span className="text-white font-mono bg-white/5 px-1 rounded">{server.port}</span>) is allowed through the firewall. Friends can now join using your public IP.</span>
+                            : <span>Your server port (<span className="text-white font-mono bg-white/5 px-1 rounded">{server.port}</span>) is currently <strong className="text-red-400">BLOCKED</strong>. Friends cannot join until you allow this rule.</span>
+                        }
                     </p>
 
                     {firewallStatus !== 'active' && (
-                        <button
-                            onClick={handleFixFirewall}
-                            className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                            <Zap className="w-4 h-4" />
-                            Allow Port {server.port}
-                        </button>
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleFixFirewall}
+                                className="w-full py-3 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 group-hover:shadow-red-500/30"
+                            >
+                                <Zap className="w-4 h-4 fill-white animate-pulse" />
+                                Fix Firewall Rules
+                            </button>
+                            <p className="text-[10px] text-center text-text-muted opacity-60">
+                                This will add an inbound rule for TCP Port {server.port}
+                            </p>
+                        </div>
                     )}
                     {firewallStatus === 'active' && (
-                        <div className="w-full py-2 bg-white/5 text-text-muted font-bold rounded-lg flex items-center justify-center text-sm cursor-default">
-                            Rule Active for TCP/{server.port}
+                        <div className="flex gap-2">
+                            <div className="flex-1 py-2.5 bg-white/5 border border-white/5 text-text-muted font-bold rounded-xl flex items-center justify-center text-sm cursor-default">
+                                <Check className="w-4 h-4 mr-2 text-green-500" />
+                                Rule Active
+                            </div>
+                            <button
+                                onClick={checkFirewall}
+                                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 text-text-muted hover:text-white rounded-xl transition-colors"
+                                title="Re-check Status"
+                            >
+                                <Activity className="w-4 h-4" />
+                            </button>
                         </div>
                     )}
                 </div>

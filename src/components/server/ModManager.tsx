@@ -21,12 +21,19 @@ interface Addon {
     author?: string;
 }
 
+interface PaginatedResult<T> {
+    items: T[];
+    total: number;
+}
+
 interface VersionInfo {
     id: string;
     name: string;
     gameVersions: string[];
     loaders: string[];
     downloadUrl: string;
+    datePublished: string;
+    versionType: string;
 }
 
 const SOURCES = [
@@ -105,16 +112,21 @@ export function ModManager({ server }: ModManagerProps) {
 
             if (sourceId === 'modrinth') {
                 if (isPluginServer) {
-                    const res = await invoke<any[]>('search_modrinth_plugins', { query: effectiveQuery });
-                    results = res; // Modrinth plugin search doesn't support pagination via this wrapper? Assuming it returns top results.
-                    setTotalPages(5);
+                    const res = await invoke<PaginatedResult<any>>('search_modrinth_plugins', {
+                        query: effectiveQuery,
+                        offset: (currentPage - 1) * 20
+                    });
+                    results = res.items;
+                    setTotalPages(Math.ceil(res.total / 20));
                 } else {
-                    // Search mods supports pagination logic implicitly by limit/offsets if we modified the backend.
-                    // The backend `search_modrinth_mods` is hardcoded to limit 20. 
-                    // To support real pagination we would need backend updates, but for now we simulate navigation or just fetch.
-                    // IMPORTANT: The backend command currently treats query and facets.
-                    results = await invoke('search_modrinth_mods', { query: effectiveQuery, loader: loaderType });
-                    setTotalPages(10);
+                    const res = await invoke<PaginatedResult<any>>('search_modrinth_mods', {
+                        query: effectiveQuery,
+                        loader: loaderType,
+                        offset: (currentPage - 1) * 20
+                    });
+                    results = res.items;
+                    // Limit to 50 pages reasonably or use actual total if not immense
+                    setTotalPages(Math.min(50, Math.ceil(res.total / 20)));
                 }
             } else if (sourceId === 'spigot') {
                 results = await invoke('search_spigot_plugins', { query: searchQuery, page: currentPage }); // Uses 'page'
@@ -181,7 +193,9 @@ export function ModManager({ server }: ModManagerProps) {
                 name: 'Latest Version',
                 gameVersions: [server.version],
                 loaders: [server.type, loaderType],
-                downloadUrl: ''
+                downloadUrl: '',
+                datePublished: new Date().toISOString(),
+                versionType: 'release'
             }]);
         } finally {
             setLoadingVersions(false);
@@ -500,13 +514,26 @@ export function ModManager({ server }: ModManagerProps) {
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="font-bold text-white">{version.name}</span>
+                                                    <span className={cn(
+                                                        "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded",
+                                                        version.versionType === 'release' ? "bg-green-500/20 text-green-400" :
+                                                            version.versionType === 'beta' ? "bg-orange-500/20 text-orange-400" :
+                                                                "bg-red-500/20 text-red-400"
+                                                    )}>
+                                                        {version.versionType}
+                                                    </span>
+                                                    <span className="text-xs text-text-muted">
+                                                        • {new Date(version.datePublished).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <span className="text-xs bg-white/10 px-2 py-0.5 rounded text-text-muted">
                                                         {version.loaders.join(', ')}
                                                     </span>
+                                                    <p className="text-xs text-text-muted">
+                                                        MC: {version.gameVersions.join(', ')}
+                                                    </p>
                                                 </div>
-                                                <p className="text-xs text-text-muted">
-                                                    Supports: {version.gameVersions.join(', ')}
-                                                </p>
                                             </div>
                                             <button
                                                 onClick={() => installVersion(version)}

@@ -478,7 +478,7 @@ export function ServerDetail() {
                     <TabButton active={activeTab === 'players'} onClick={() => setActiveTab('players')} icon={Users} label="Players" desc="Manage" />
                     <TabButton active={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={Files} label="Files" desc="Manage files" />
 
-                    {(server.type === 'paper' || server.type === 'spigot' || server.type === 'purpur') && (
+                    {(server.type === 'paper' || server.type === 'spigot' || server.type === 'purpur' || server.type === 'nukkit') && (
                         <TabButton active={activeTab === 'plugins'} onClick={() => setActiveTab('plugins')} icon={Puzzle} label="Plugins" desc="Browse & Install" />
                     )}
                     {(server.type === 'forge' || server.type === 'fabric') && (

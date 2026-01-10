@@ -145,7 +145,7 @@ export function PropertiesEditor({ serverPath, serverType, serverName }: Propert
     const [saving, setSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const isBedrock = serverType === 'bedrock';
+    const isBedrock = serverType === 'bedrock' || serverType === 'nukkit';
     const PROPERTY_FIELDS = isBedrock ? BEDROCK_PROPERTIES : JAVA_PROPERTIES;
     const CATEGORIES = isBedrock ? BEDROCK_CATEGORIES : JAVA_CATEGORIES;
     const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]);

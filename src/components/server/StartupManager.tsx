@@ -16,7 +16,7 @@ interface JavaInstall {
 }
 
 const isJavaServer = (type: ServerType) => {
-    return ['vanilla', 'paper', 'spigot', 'forge', 'fabric', 'purpur'].includes(type);
+    return ['vanilla', 'paper', 'spigot', 'forge', 'fabric', 'purpur', 'nukkit'].includes(type);
 };
 
 export function StartupManager({ server }: StartupManagerProps) {

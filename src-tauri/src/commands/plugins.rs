@@ -13,6 +13,13 @@ pub struct InstalledPlugin {
 #[derive(Debug, Deserialize)]
 pub struct ModrinthSearchResponse {
     pub hits: Vec<ModrinthHit>,
+    pub total_hits: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedResult<T> {
+    pub items: Vec<T>,
+    pub total: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -73,12 +80,14 @@ pub async fn list_plugins(server_path: String) -> Result<Vec<InstalledPlugin>, S
 }
 
 #[tauri::command]
-pub async fn search_modrinth_plugins(query: String) -> Result<Vec<ModrinthHit>, String> {
+pub async fn search_modrinth_plugins(query: String, offset: Option<u64>) -> Result<PaginatedResult<ModrinthHit>, String> {
     let client = Client::new();
+    let off = offset.unwrap_or(0);
     
     let url = format!(
-        "https://api.modrinth.com/v2/search?query={}&facets=[[\"project_type:plugin\"]]&limit=20",
-        urlencoding::encode(&query)
+        "https://api.modrinth.com/v2/search?query={}&facets=[[\"project_type:plugin\"]]&limit=20&offset={}",
+        urlencoding::encode(&query),
+        off
     );
 
     let resp = client.get(&url)
@@ -91,7 +100,10 @@ pub async fn search_modrinth_plugins(query: String) -> Result<Vec<ModrinthHit>, 
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-    Ok(search_result.hits)
+    Ok(PaginatedResult {
+        items: search_result.hits,
+        total: search_result.total_hits,
+    })
 }
 
 #[tauri::command]
@@ -162,24 +174,29 @@ pub async fn delete_plugin(server_path: String, filename: String) -> Result<(), 
 // --- Mod Support (for Forge/Fabric) ---
 
 #[tauri::command]
-pub async fn search_modrinth_mods(query: String, loader: String) -> Result<Vec<ModrinthHit>, String> {
+pub async fn search_modrinth_mods(query: String, loader: String, offset: Option<u64>) -> Result<PaginatedResult<ModrinthHit>, String> {
     let client = reqwest::Client::builder()
         .user_agent("Mineserver/1.0.0 (contact@mineserver.app)")
         .build()
         .map_err(|e| e.to_string())?;
     
+    let off = offset.unwrap_or(0);
     // For mods, we filter by project_type:mod and the loader (forge or fabric)
     let facets = format!("[[\"project_type:mod\"],[\"categories:{}\"]]", loader);
     let url = format!(
-        "https://api.modrinth.com/v2/search?query={}&facets={}&limit=20",
+        "https://api.modrinth.com/v2/search?query={}&facets={}&limit=20&offset={}",
         urlencoding::encode(&query),
-        urlencoding::encode(&facets)
+        urlencoding::encode(&facets),
+        off
     );
     
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let search_result: ModrinthSearchResponse = resp.json().await.map_err(|e| e.to_string())?;
     
-    Ok(search_result.hits)
+    Ok(PaginatedResult {
+        items: search_result.hits,
+        total: search_result.total_hits,
+    })
 }
 
 #[tauri::command]
@@ -587,6 +604,10 @@ pub struct VersionInfo {
     pub loaders: Vec<String>,
     #[serde(rename = "downloadUrl")]
     pub download_url: String,
+    #[serde(rename = "datePublished")]
+    pub date_published: String,
+    #[serde(rename = "versionType")]
+    pub version_type: String, 
 }
 
 #[tauri::command]
@@ -609,6 +630,8 @@ pub async fn get_plugin_versions(source: String, project_id: String, slug: Strin
                     game_versions: v["game_versions"].as_array()?.iter().filter_map(|g| g.as_str().map(|s| s.to_string())).collect(),
                     loaders: v["loaders"].as_array()?.iter().filter_map(|l| l.as_str().map(|s| s.to_string())).collect(),
                     download_url: v["files"][0]["url"].as_str().unwrap_or("").to_string(),
+                    date_published: v["date_published"].as_str().unwrap_or("").to_string(),
+                    version_type: v["version_type"].as_str().unwrap_or("release").to_string(),
                 })
             }).collect();
             
@@ -633,6 +656,8 @@ pub async fn get_plugin_versions(source: String, project_id: String, slug: Strin
                     game_versions,
                     loaders: vec!["paper".to_string(), "spigot".to_string()],
                     download_url: "".to_string(),
+                    date_published: v["createdAt"].as_str().unwrap_or("").to_string(),
+                    version_type: v["channel"]["name"].as_str().unwrap_or("Release").to_string(),
                 })
             }).collect();
             
@@ -648,9 +673,11 @@ pub async fn get_plugin_versions(source: String, project_id: String, slug: Strin
                 Some(VersionInfo {
                     id: v["id"].as_u64()?.to_string(),
                     name: v["name"].as_str().unwrap_or("Unknown").to_string(),
-                    game_versions: vec!["1.8".to_string(), "1.12".to_string(), "1.16".to_string(), "1.18".to_string(), "1.19".to_string(), "1.20".to_string(), "1.21".to_string()],
+                    game_versions: vec!["1.8-1.21".to_string()],
                     loaders: vec!["spigot".to_string(), "paper".to_string(), "bukkit".to_string()],
                     download_url: format!("https://api.spiget.org/v2/resources/{}/download", project_id),
+                    date_published: "".to_string(), // Spiget versions endpoint lacks easy date
+                    version_type: "Release".to_string(),
                 })
             }).collect();
             
@@ -659,9 +686,11 @@ pub async fn get_plugin_versions(source: String, project_id: String, slug: Strin
                 Ok(vec![VersionInfo {
                     id: "latest".to_string(),
                     name: "Latest".to_string(),
-                    game_versions: vec!["1.8".to_string(), "1.12".to_string(), "1.16".to_string(), "1.18".to_string(), "1.19".to_string(), "1.20".to_string(), "1.21".to_string()],
+                    game_versions: vec!["1.8-1.21".to_string()],
                     loaders: vec!["spigot".to_string(), "paper".to_string()],
                     download_url: format!("https://api.spiget.org/v2/resources/{}/download", project_id),
+                    date_published: "".to_string(),
+                    version_type: "Release".to_string(),
                 }])
             } else {
                 Ok(result)
@@ -675,6 +704,8 @@ pub async fn get_plugin_versions(source: String, project_id: String, slug: Strin
                 game_versions: vec!["1.20".to_string(), "1.21".to_string()],
                 loaders: vec!["paper".to_string(), "spigot".to_string()],
                 download_url: "".to_string(),
+                date_published: "".to_string(),
+                version_type: "Release".to_string(),
             }])
         }
     }

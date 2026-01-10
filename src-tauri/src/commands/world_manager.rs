@@ -68,13 +68,27 @@ fn parse_properties(path: &Path) -> HashMap<String, String> {
 }
 
 fn resolve_world_path(server_path: &Path, level_name: &str) -> PathBuf {
-    // Check for Bedrock 'worlds' folder
-    let bedrock_worlds = server_path.join("worlds");
-    if bedrock_worlds.exists() && bedrock_worlds.is_dir() {
-        return bedrock_worlds.join(level_name);
+    // 1. Check strict Bedrock path (worlds/level_name)
+    let bedrock_world = server_path.join("worlds").join(level_name);
+    if bedrock_world.exists() && bedrock_world.is_dir() {
+        return bedrock_world;
     }
-    // Default to Java (root level)
-    server_path.join(level_name)
+
+    // 2. Check strict Java path (root/level_name)
+    let java_world = server_path.join(level_name);
+    if java_world.exists() && java_world.is_dir() {
+        return java_world;
+    }
+
+    // 3. Fallback for new world creation (If neither exists yet)
+    let bedrock_worlds_folder = server_path.join("worlds");
+    if bedrock_worlds_folder.exists() && bedrock_worlds_folder.is_dir() {
+        // If 'worlds' folder exists, we likely want to create the new world there (Bedrock)
+        return bedrock_worlds_folder.join(level_name);
+    }
+
+    // Default to root (Java)
+    java_world
 }
 
 #[tauri::command]

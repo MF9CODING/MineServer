@@ -1,6 +1,6 @@
 {
   "productName": "MineServer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.mineserver.app",
   "build": {
     "beforeDevCommand": "npm run dev",

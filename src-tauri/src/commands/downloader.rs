@@ -68,7 +68,7 @@ pub async fn download_server(
     app_handle: tauri::AppHandle,
     server_type: String,
     version: String,
-    output_path: String,
+    server_path: String,
     preserve_config: Option<bool>,
 ) -> Result<String, String> {
     let preserve = preserve_config.unwrap_or(false);
@@ -81,7 +81,7 @@ pub async fn download_server(
     let url = resolve_url(&client, &server_type, &version).await?;
     
     // Ensure directory exists
-    let path = Path::new(&output_path);
+    let path = Path::new(&server_path);
     if !path.exists() {
         std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
     }

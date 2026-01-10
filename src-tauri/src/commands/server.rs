@@ -149,10 +149,35 @@ pub fn duplicate_file(path: String, new_path: String) -> Result<(), String> {
     }
     
     let path_obj = Path::new(&path);
+    if !path_obj.exists() {
+        return Err("Source file not found".to_string());
+    }
+
     if path_obj.is_dir() {
          return Err("Duplicating directories is not supported yet".to_string());
     } else {
-        std::fs::copy(path, new_path).map_err(|e| e.to_string())?;
+        // Safe duplication logic
+        let mut final_new_path = std::path::PathBuf::from(&new_path);
+        let mut counter = 1;
+
+        // Extract stem and extension for incrementing
+        let file_stem = final_new_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        let extension = final_new_path.extension().map(|e| e.to_string_lossy().to_string());
+        // Fix: Clone parent to PathBuf to avoid borrowing final_new_path which changes
+        let parent = final_new_path.parent().unwrap_or(Path::new("")).to_path_buf();
+
+        // Loop until we find a free name
+        while final_new_path.exists() {
+            let new_name = if let Some(ref ext) = extension {
+                format!("{} (copy {}).{}", file_stem, counter, ext)
+            } else {
+                format!("{} (copy {})", file_stem, counter)
+            };
+            final_new_path = parent.join(new_name);
+            counter += 1;
+        }
+
+        std::fs::copy(path, final_new_path).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
