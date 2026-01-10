@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colors */
+  --color-background: #0b0b14;
+  --color-surface: #13131f;
+  --color-surface-hover: #1c1c2e;
+
+  /* Primary - Neon Green */
+  --color-primary: #00ff9d;
+  --color-primary-dark: #00cc7a;
+  --color-primary-glow: rgba(0, 255, 157, 0.4);
+
+  /* Status */
+  --color-success: #00ff9d;
+  --color-error: #ff3366;
+  --color-warning: #ffb300;
+
+  /* Text */
+  --color-text: #ffffff;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  /* Borders */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-hover: rgba(255, 255, 255, 0.15);
+}
+
+@layer base {
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background-color: var(--color-background);
+    background-image:
+      radial-gradient(circle at 15% 50%, rgba(0, 255, 157, 0.08), transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(0, 212, 255, 0.08), transparent 25%);
+    color: var(--color-text);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+
+  /* Premium Glass Cards */
+  .glass-panel {
+    @apply bg-surface/60 backdrop-blur-xl border border-border;
+  }
+
+  .glass-card {
+    @apply relative overflow-hidden bg-surface/40 backdrop-blur-md border border-border rounded-2xl transition-all duration-300;
+  }
+
+  .glass-card:hover {
+    @apply border-primary/30 bg-surface/60 shadow-[0_0_30px_-10px_var(--color-primary-glow)];
+    transform: translateY(-2px);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply relative overflow-hidden bg-primary text-black font-semibold px-6 py-2.5 rounded-xl transition-all duration-200 shadow-[0_0_20px_-5px_var(--color-primary-glow)] hover:shadow-[0_0_30px_-5px_var(--color-primary-glow)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply bg-surface hover:bg-surface-hover text-text border border-border font-medium px-4 py-2.5 rounded-xl transition-all duration-200 hover:border-text-secondary/30;
+  }
+
+  /* Inputs */
+  .input-modern {
+    @apply w-full bg-surface/50 border border-border rounded-xl px-4 py-3 text-text placeholder:text-text-muted outline-none transition-all duration-200 focus:border-primary/50 focus:bg-surface/80 focus:shadow-[0_0_0_4px_#00ff9d1a];
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 20px var(--color-primary-glow);
+  }
+
+  .border-gradient {
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
