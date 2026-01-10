@@ -161,8 +161,8 @@ export default function WorldManager({ server }: WorldManagerProps) {
 
             // Call backend
             await invoke('upload_dimension', {
-                server_path: server.path,
-                zip_path: tempZipPath,
+                serverPath: server.path,
+                zipPath: tempZipPath,
                 dimension: dimension
             });
 
@@ -255,8 +255,8 @@ export default function WorldManager({ server }: WorldManagerProps) {
             });
 
             await invoke('archive_world', {
-                server_path: server.path,
-                save_path: filePath
+                serverPath: server.path,
+                savePath: filePath
             });
 
             unlisten();
