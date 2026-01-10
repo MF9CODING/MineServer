@@ -1,8 +1,0 @@
-
-> mineserver@1.0.0 tauri
-> tauri android build --apk
-
-error: a value is required for '--apk <APK>' but none was supplied
-  [possible values: true, false]
-
-For more information, try '--help'.

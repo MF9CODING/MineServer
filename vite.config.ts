@@ -1,3 +1,8 @@
+/**
+ * Mineserver Vite Configuration
+ * Configured for React + TypeScript + TailwindCSS
+ * tailored for Tauri v2 development environment.
+ */
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
