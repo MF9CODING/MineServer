@@ -36,6 +36,7 @@ const SERVER_OPTIONS: { id: ServerType; name: string; desc: string; icon: any; r
     { id: 'forge', name: 'Forge', desc: 'For mods like RLCraft', icon: Shield, category: 'modded' },
     { id: 'fabric', name: 'Fabric', desc: 'Lightweight modding', icon: Zap, category: 'modded' },
     { id: 'bedrock', name: 'Bedrock BDS', desc: 'Official Bedrock server', icon: Box, category: 'bedrock' },
+    { id: 'nukkit', name: 'NukkitX', desc: 'Bedrock server with Plugins', icon: Zap, category: 'bedrock' },
 ];
 
 const STEPS = [

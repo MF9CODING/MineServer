@@ -228,7 +228,8 @@ export function Dashboard() {
                                             onDelete={async () => {
                                                 if (confirm("⚠️ This server will be PERMANENTLY DELETED. Continue?")) {
                                                     try {
-                                                        await useAppStore.getState().deleteServer(server.id);
+                                                        const store = useAppStore.getState();
+                                                        await store.deleteServer(server.id);
                                                         toast.success("Server deleted");
                                                     } catch (e) {
                                                         toast.error("Failed to delete server");

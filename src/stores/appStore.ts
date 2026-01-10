@@ -116,9 +116,10 @@ export const useAppStore = create<AppState>()(
                 } catch (error) {
                     console.error("Backend delete failed (files might be missing), removing from UI anyway:", error);
                 } finally {
-                    // Always remove from local state
+                    // Always remove from local state and clear selection if needed
                     set((state) => ({
                         servers: state.servers.filter((s) => s.id !== id),
+                        selectedServerId: state.selectedServerId === id ? null : state.selectedServerId
                     }));
                 }
             },
