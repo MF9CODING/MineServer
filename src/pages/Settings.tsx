@@ -374,14 +374,17 @@ export function Settings() {
                         </div>
 
                         <div className="grid grid-cols-3 gap-3">
-                            <a href="https://github.com" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-2 p-4 rounded-xl bg-surface/50 border border-border/30 hover:border-primary/30 transition-colors">
+                            <a href="https://github.com/MF9CODING/MineServer" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-2 p-4 rounded-xl bg-surface/50 border border-border/30 hover:border-primary/30 transition-colors">
                                 <Github className="w-6 h-6 text-white" />
                                 <span className="text-sm text-text-muted">GitHub</span>
                             </a>
-                            <a href="https://discord.gg" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-2 p-4 rounded-xl bg-surface/50 border border-border/30 hover:border-primary/30 transition-colors">
+                            <button
+                                onClick={() => toast.info("Discord Community Coming Soon!", { description: "Join us later for support and giveaways." })}
+                                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-surface/50 border border-border/30 hover:border-primary/30 transition-colors"
+                            >
                                 <MessageCircle className="w-6 h-6 text-indigo-400" />
                                 <span className="text-sm text-text-muted">Discord</span>
-                            </a>
+                            </button>
                             <button
                                 onClick={handleCheckUpdate}
                                 disabled={checkingUpdate}
