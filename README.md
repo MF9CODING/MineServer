@@ -12,7 +12,6 @@
 [![Powered By Tauri](https://img.shields.io/badge/Native-Tauri_v2-blue?style=for-the-badge&logo=tauri)](https://tauri.app/)
 
 [**Download for Windows**](https://github.com/MF9CODING/Mineserver/releases/latest) • [**View Changelog**](https://github.com/MF9CODING/Mineserver/releases) • [**Report Bug**](https://github.com/MF9CODING/Mineserver/issues)
-
 ---
 </div>
 
