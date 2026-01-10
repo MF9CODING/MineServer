@@ -417,3 +417,91 @@ pub fn reset_playit_tunnel(
 
     Ok("Tunnel config reset. You can now start fresh.".into())
 }
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn check_firewall_rule(port: u16) -> bool {
+    use std::process::Command;
+    // Check if a rule with our naming convention exists
+    let rule_name = format!("MineServer Port {}", port);
+    
+    let output = Command::new("netsh")
+        .args(["advfirewall", "firewall", "show", "rule", &format!("name=\"{}\"", rule_name)])
+        .output();
+        
+    match output {
+        Ok(o) => o.status.success(), // Exit code 0 means rule found
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn check_firewall_rule(_port: u16) -> bool {
+    // Non-windows support not implemented yet (ufw/iptables?)
+    true // Assume open or managed externally
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn add_firewall_rule(port: u16) -> Result<String, String> {
+    use std::process::Command;
+    
+    let rule_name = format!("MineServer Port {}", port);
+    
+    // Check if already exists to avoid duplicates
+    if check_firewall_rule(port) {
+        return Ok("Rule already exists".to_string());
+    }
+    
+    // We try to run directly. If failed due to permissions, we try Powershell RunAs
+    // Direct attempt:
+    let output = Command::new("netsh")
+        .args([
+            "advfirewall", "firewall", "add", "rule", 
+            &format!("name=\"{}\"", rule_name), 
+            "dir=in", 
+            "action=allow", 
+            "protocol=TCP", 
+            &format!("localport={}", port)
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+        
+    if output.status.success() {
+        return Ok("Rule added successfully".to_string());
+    }
+    
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("Run as administrator") || stderr.contains("elevation") {
+        // Try to trigger UAC via PowerShell
+        let ps_script = format!(
+            "Start-Process netsh -ArgumentList 'advfirewall firewall add rule name=\"{}\" dir=in action=allow protocol=TCP localport={}' -Verb RunAs -WindowStyle Hidden -Wait",
+            rule_name, port
+        );
+        
+        let ps_output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_script])
+            .output()
+            .map_err(|e| e.to_string())?;
+            
+        if ps_output.status.success() {
+            // Re-check to confirm it actually worked
+             if check_firewall_rule(port) {
+                 return Ok("Rule added via UAC prompt".to_string());
+             } else {
+                 return Err("User cancelled UAC or operation failed".to_string());
+             }
+        } else {
+            return Err("Failed to trigger UAC prompt".to_string());
+        }
+    }
+    
+    Err(format!("Netsh failed: {}", stderr))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn add_firewall_rule(_port: u16) -> Result<String, String> {
+    Err("Automatic firewall configuration is only supported on Windows.".to_string())
+}

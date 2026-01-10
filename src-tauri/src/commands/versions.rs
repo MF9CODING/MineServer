@@ -214,7 +214,7 @@ pub async fn get_fabric_versions() -> Result<Vec<String>, String> {
 pub async fn get_spigot_versions() -> Result<Vec<String>, String> {
     // Spigot uses the same PaperMC API structure (they mirror versions)
     // We'll use GetBukkit API or fallback to known versions
-    let client = Client::builder()
+    let _client = Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         .build()
         .map_err(|e| e.to_string())?;

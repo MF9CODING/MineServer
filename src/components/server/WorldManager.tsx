@@ -3,6 +3,7 @@ import { Server } from '../../stores/appStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
+import { save } from '@tauri-apps/plugin-dialog';
 import {
     Globe, Upload, Trash2, RefreshCw, AlertTriangle,
     HardDrive, Flame, Ghost, FolderOpen,
@@ -129,13 +130,6 @@ export default function WorldManager({ server }: WorldManagerProps) {
             return;
         }
 
-        // For Tauri, we need the actual file path. But browser File object doesn't expose it directly.
-        // We need to use a different approach: save the file temporarily OR use drag-drop with paths.
-        // Since browser File doesn't give full path, we'll:
-        // 1. Read the file as ArrayBuffer.
-        // 2. Write it to a temp location using our write_binary_file command.
-        // 3. Then call upload_dimension with that temp path.
-
         const toastId = toast.loading(`Preparing ${dimension} upload...`);
 
         try {
@@ -143,6 +137,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
 
             const arrayBuffer = await file.arrayBuffer();
             const bytes = new Uint8Array(arrayBuffer);
+            // write_binary_file expects number[]
             const byteNums = Array.from(bytes);
 
             // Write to temp location in server directory
@@ -240,17 +235,36 @@ export default function WorldManager({ server }: WorldManagerProps) {
         }
     };
 
-    const handleDownload = async (worldName: string) => {
-        const toastId = toast.loading("Preparing download...");
+    const handleExportWorld = async (worldName: string = info?.level_name || 'world') => {
         try {
-            await invoke('create_backup', {
-                serverPath: server.path,
-                serverName: server.name,
-                backupType: 'manual'
+            const filePath = await save({
+                defaultPath: `${worldName}.zip`,
+                filters: [{
+                    name: 'Zip Archive',
+                    extensions: ['zip']
+                }]
             });
-            toast.success(`${worldName} zipped to Backups folder!`, { id: toastId });
+
+            if (!filePath) return;
+
+            const toastId = toast.loading("Archiving world...");
+            setUploadProgress({ percentage: 0, details: "Starting archive..." });
+
+            const unlisten = await listen<{ percentage: number; details: string }>('world_archive_progress', (event) => {
+                setUploadProgress({ percentage: event.payload.percentage, details: event.payload.details });
+            });
+
+            await invoke('archive_world', {
+                server_path: server.path,
+                save_path: filePath
+            });
+
+            unlisten();
+            toast.success("World exported successfully!", { id: toastId });
         } catch (e) {
-            toast.error("Download preparation failed: " + e, { id: toastId });
+            toast.error("Export failed: " + e);
+        } finally {
+            setUploadProgress(null);
         }
     };
 
@@ -332,7 +346,9 @@ export default function WorldManager({ server }: WorldManagerProps) {
                     <div className="w-full max-w-md space-y-4">
                         <div className="text-center">
                             <Upload className="w-12 h-12 text-blue-400 mx-auto mb-4 animate-bounce" />
-                            <h3 className="text-xl font-bold text-white mb-1">Uploading World</h3>
+                            <h3 className="text-xl font-bold text-white mb-1">
+                                {uploadProgress.details.startsWith("Archiving") ? "Archiving World" : "Uploading World"}
+                            </h3>
                             <p className="text-text-muted text-sm">{uploadProgress.details}</p>
                         </div>
 
@@ -438,6 +454,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                             onUpload={() => overworldInputRef.current?.click()}
                             onReset={() => openRegenModal('overworld')}
                             onDelete={() => handleDelete('overworld')}
+                            onDownload={() => handleExportWorld()}
                             formatSize={formatSize}
                         />
 
@@ -450,6 +467,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                             onUpload={() => netherInputRef.current?.click()}
                             onReset={() => openRegenModal('nether')}
                             onDelete={() => handleDelete('nether')}
+                            onDownload={() => handleExportWorld()}
                             formatSize={formatSize}
                         />
 
@@ -462,6 +480,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                             onUpload={() => endInputRef.current?.click()}
                             onReset={() => openRegenModal('end')}
                             onDelete={() => handleDelete('end')}
+                            onDownload={() => handleExportWorld()}
                             formatSize={formatSize}
                         />
                     </div>
@@ -511,7 +530,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                                                         <Edit2 className="w-4 h-4" />
                                                     </button>
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDownload(w); }}
+                                                        onClick={(e) => { e.stopPropagation(); handleExportWorld(w); }}
                                                         className="p-1.5 hover:bg-white/20 bg-black/40 rounded-lg text-text-muted hover:text-white"
                                                         title="Download World (Zip)"
                                                     >
@@ -686,10 +705,11 @@ interface DimensionCardProps {
     onUpload: () => void;
     onReset: () => void;
     onDelete: () => void;
+    onDownload: () => void;
     formatSize: (bytes: number) => string;
 }
 
-function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, onDelete, formatSize }: DimensionCardProps) {
+function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, onDelete, onDownload, formatSize }: DimensionCardProps) {
     const dimInfo = DIMENSION_INFO[type];
     const DimIcon = dimInfo.icon;
     const isRunning = serverStatus === 'running';
@@ -726,8 +746,8 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
             <div className="p-4 space-y-3">
                 <p className="text-xs text-text-muted">{dimInfo.description}</p>
 
-                {/* Actions - Always show all buttons for consistent layout */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* Actions */}
+                <div className="grid grid-cols-4 gap-2">
                     <button
                         onClick={onUpload}
                         disabled={isRunning}
@@ -735,9 +755,21 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
                             "py-2.5 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50",
                             "bg-primary/20 text-primary hover:bg-primary/30"
                         )}
+                        title="Upload"
                     >
                         <Upload className="w-3.5 h-3.5" />
-                        Upload
+                    </button>
+
+                    <button
+                        onClick={onDownload}
+                        disabled={isRunning || !exists}
+                        className={cn(
+                            "py-2.5 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50",
+                            "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                        )}
+                        title="Download"
+                    >
+                        <Download className="w-3.5 h-3.5" />
                     </button>
 
                     <button
@@ -749,14 +781,15 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
                             dimInfo.textColor,
                             "hover:opacity-80"
                         )}
+                        title="Reset"
                     >
                         <RefreshCw className="w-3.5 h-3.5" />
-                        Reset
                     </button>
                     <button
                         onClick={onDelete}
                         disabled={isRunning || !exists}
                         className="py-2.5 rounded-lg font-bold text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center justify-center disabled:opacity-50"
+                        title="Delete"
                     >
                         <Trash2 className="w-3.5 h-3.5" />
                     </button>

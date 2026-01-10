@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Server, useAppStore } from '../../stores/appStore';
-import { Shield, ShieldAlert, Lock, Activity, AlertTriangle, Zap, Check } from 'lucide-react';
+import { Shield, ShieldAlert, Lock, Activity, AlertTriangle, Zap, Check, Flame } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { invoke } from '@tauri-apps/api/core';
@@ -12,6 +12,31 @@ interface SecurityManagerProps {
 export function SecurityManager({ server }: SecurityManagerProps) {
     const { updateServer } = useAppStore();
     const [panicMode, setPanicMode] = useState(false);
+    const [firewallStatus, setFirewallStatus] = useState<'active' | 'inactive' | 'unknown'>('unknown');
+
+    useEffect(() => {
+        checkFirewall();
+    }, [server.port]);
+
+    const checkFirewall = async () => {
+        try {
+            const active = await invoke<boolean>('check_firewall_rule', { port: server.port });
+            setFirewallStatus(active ? 'active' : 'inactive');
+        } catch (e) {
+            console.error("Firewall check failed:", e);
+        }
+    };
+
+    const handleFixFirewall = async () => {
+        const toastId = toast.loading("Configuring Windows Firewall...");
+        try {
+            await invoke('add_firewall_rule', { port: server.port });
+            toast.success("Firewall rule added successfully!", { id: toastId });
+            checkFirewall();
+        } catch (e: any) {
+            toast.error("Failed to add firewall rule: " + e, { id: toastId });
+        }
+    };
 
     const handleTunnelGuard = async () => {
         const newState = !server.tunnelGuard;
@@ -80,6 +105,46 @@ export function SecurityManager({ server }: SecurityManagerProps) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Windows Firewall */}
+                <div className={cn(
+                    "border rounded-2xl p-6 relative overflow-hidden transition-all",
+                    firewallStatus === 'active' ? "bg-orange-500/5 border-orange-500/30" : "bg-[#161b22] border-red-500/30"
+                )}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-white flex items-center gap-2">
+                            <Flame className="w-5 h-5 text-orange-400" /> Windows Firewall
+                        </h3>
+                        {firewallStatus === 'active' ? (
+                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold">
+                                <Check className="w-3 h-3" /> Protected
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold animate-pulse">
+                                <AlertTriangle className="w-3 h-3" /> Action Needed
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-sm text-text-muted mb-4 h-10">
+                        Ensures your server port ({server.port}) is open to the public internet so friends can join.
+                        <br /><span className="text-orange-400/70 text-xs mt-1 block">Default Windows settings often block this.</span>
+                    </p>
+
+                    {firewallStatus !== 'active' && (
+                        <button
+                            onClick={handleFixFirewall}
+                            className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Zap className="w-4 h-4" />
+                            Allow Port {server.port}
+                        </button>
+                    )}
+                    {firewallStatus === 'active' && (
+                        <div className="w-full py-2 bg-white/5 text-text-muted font-bold rounded-lg flex items-center justify-center text-sm cursor-default">
+                            Rule Active for TCP/{server.port}
+                        </div>
+                    )}
+                </div>
+
                 {/* Tunnel Guard */}
                 <div className={cn(
                     "border rounded-2xl p-6 relative overflow-hidden transition-all",

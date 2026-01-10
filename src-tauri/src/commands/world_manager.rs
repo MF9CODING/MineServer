@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::fs::{self, File};
+use std::io::{Read, Write, Cursor};
 use std::collections::HashMap;
 use serde::Serialize;
 
@@ -524,6 +525,96 @@ pub fn upload_dimension<R: tauri::Runtime>(
     let _ = window.emit("world_upload_progress", ProgressPayload {
         percentage: 100,
         details: "Done!".to_string(),
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn archive_world<R: tauri::Runtime>(
+    window: tauri::Window<R>,
+    server_path: String,
+    save_path: String,
+) -> Result<(), String> {
+    use std::io::Write;
+    use tauri::Emitter;
+    use walkdir::WalkDir;
+
+    let path = Path::new(&server_path);
+    let level_name = get_level_name(path);
+    
+    // We want to archive the main world folder
+    // For Bedrock: "worlds/{level_name}"
+    // For Java: "{level_name}" (plus nether/end folders if they exist separately)
+    
+    let world_path = resolve_world_path(path, &level_name);
+    
+    if !world_path.exists() {
+        return Err("World folder not found".to_string());
+    }
+
+    let file = File::create(&save_path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+
+    let mut files_to_add = Vec::new();
+    
+    // 1. Add Main World
+    for entry in WalkDir::new(&world_path).into_iter().filter_map(|e| e.ok()) {
+        files_to_add.push((entry.path().to_path_buf(), world_path.parent().unwrap().to_path_buf()));
+    }
+
+    // 2. Add Java Dimensions (Nether/End) if they exist at root (Paper/Spigot style)
+    let nether_path = path.join(format!("{}_nether", level_name));
+    if nether_path.exists() {
+         for entry in WalkDir::new(&nether_path).into_iter().filter_map(|e| e.ok()) {
+            files_to_add.push((entry.path().to_path_buf(), path.to_path_buf()));
+        }
+    }
+    
+    let end_path = path.join(format!("{}_the_end", level_name));
+    if end_path.exists() {
+         for entry in WalkDir::new(&end_path).into_iter().filter_map(|e| e.ok()) {
+            files_to_add.push((entry.path().to_path_buf(), path.to_path_buf()));
+        }
+    }
+
+    let total_files = files_to_add.len();
+    let mut processed = 0;
+    let mut last_emit = std::time::Instant::now();
+
+    for (full_path, base_path) in files_to_add {
+        let path = full_path.strip_prefix(&base_path).unwrap();
+        let path_str = path.to_string_lossy().replace("\\", "/"); // Zip requires forward slashes
+
+        if full_path.is_dir() {
+            let _ = zip.add_directory(&path_str, options);
+        } else {
+            zip.start_file(&path_str, options).map_err(|e| e.to_string())?;
+            let mut f = File::open(&full_path).map_err(|e| e.to_string())?;
+            let mut buffer = Vec::new();
+            f.read_to_end(&mut buffer).map_err(|e: std::io::Error| e.to_string())?;
+            zip.write_all(&buffer).map_err(|e| e.to_string())?;
+        }
+        
+        processed += 1;
+        if last_emit.elapsed().as_millis() > 100 {
+             let percentage = ((processed as f64 / total_files as f64) * 100.0) as u8;
+             let _ = window.emit("world_archive_progress", ProgressPayload {
+                percentage,
+                details: format!("Archiving: {}", path_str),
+            });
+            last_emit = std::time::Instant::now();
+        }
+    }
+
+    let _ = zip.finish().map_err(|e| e.to_string())?;
+
+    let _ = window.emit("world_archive_progress", ProgressPayload {
+        percentage: 100,
+        details: "Archive created successfully!".to_string(),
     });
 
     Ok(())
