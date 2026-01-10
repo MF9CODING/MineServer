@@ -103,15 +103,44 @@ We support the best high-performance server software out of the box:
 ---
 
 ## ❓ FAQ
-
 **Q: Is this free?**
 A: Yes! MineServer is 100% free and open source.
 
-**Q: Can I run a server for my friends on my PC?**
-A: Absolutely. MineServer is designed exactly for that. Use the "Playit" tunnel feature if you can't port forward.
+**Q: Can I run a server for my friends?**
+A: Absolutely. MineServer is designed exactly for that. Use the "Playit" tunnel feature in the Network tab if you can't port forward.
 
-**Q: Does it support bedrock players?**
-A: Yes! You can run a dedicated Bedrock server (BDS) or use NukkitX for plugin support.
+**Q: How do I install plugins?**
+A: Go to the "Plugins" tab in your server dashboard. You can search and install plugins directly from Modrinth, Spigot, and Hangar with one click. They are automatically placed in the correct folder.
+
+**Q: Can I use mods?**
+A: Yes! Select "Fabric" or "Forge" when creating a server. You can then use the built-in Mod Manager to find and install compatible mods.
+
+**Q: Why can't my friends join?**
+A: If you haven't port forwarded, they can't connect to your local IP. Use the "Network" tab and enable a "Playit.gg" tunnel to get a public address they can use instantly—no router access required.
+
+**Q: Does it support Bedrock players?**
+A: Yes! You can run a dedicated Bedrock server (BDS) or use NukkitX for plugin support. You can also run a Java server with the GeyserMC plugin to let Bedrock players join.
+
+**Q: Where are my server files?**
+A: In the "Files" tab, you can browse, edit, and manage all your server files. You can also click "Open Folder" to view them in Windows Explorer.
+
+**Q: How much RAM should I allocate?**
+A: For a small vanilla server, 2-4GB is usually enough. For modded servers or large plugin packs, we recommend 6-8GB or more. The "Create Server" wizard helps you choose this based on your PC's specs.
+
+**Q: Can I import an existing world?**
+A: Yes! Go to the "Worlds" tab and drag your world folder or zip file into the import area.
+
+**Q: How do I back up my server?**
+A: In the "Files" tab, select all files and click "Archive". This creates a zip backup you can save anywhere.
+
+**Q: What is "Streamer Mode"?**
+A: It hides sensitive info like your IP address and coordinates from the dashboard so you can safely show the app on stream without leaking private info.
+
+**Q: My server crashes on startup!**
+A: Check the "Console" tab for red error messages. Common issues are incompatible Java versions (e.g., using Java 8 for 1.20) or mismatched mods.
+
+**Q: Do I need Java installed?**
+A: MineServer attempts to use the Java installed on your system. We recommend installing **Java 21** (for 1.21+) and **Java 17** (for 1.18+) to ensure compatibility.
 
 ---
 
