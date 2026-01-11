@@ -90,6 +90,38 @@ interface AppState {
     // Streamer Mode
     streamerMode: boolean;
     toggleStreamerMode: () => void;
+
+    // Global Settings
+    settings: AppSettings;
+    setSettings: (settings: Partial<AppSettings>) => void;
+}
+
+export interface AppSettings {
+    // General
+    startWithWindows: boolean;
+    minimizeToTray: boolean;
+    checkUpdates: boolean;
+    confirmBeforeStop: boolean;
+    autoStopOnExit: boolean;
+    defaultServerPath: string;
+    // Java
+    autoDetectJava: boolean;
+    defaultRam: number;
+    jvmArgs: string;
+    // Network
+    autoPortForward: boolean;
+    playitEnabled: boolean;
+    defaultPort: number;
+    // Appearance
+    accentColor: string;
+    animations: boolean;
+    compactMode: boolean;
+    // Backups
+    autoBackup: boolean;
+    backupInterval: number;
+    maxBackups: number;
+    backupPath: string;
+    backupBeforeUpdate: boolean;
 }
 
 export const useAppStore = create<AppState>()(
@@ -217,6 +249,32 @@ export const useAppStore = create<AppState>()(
             // Streamer Mode
             streamerMode: false,
             toggleStreamerMode: () => set((state) => ({ streamerMode: !state.streamerMode })),
+
+            // Global Settings
+            settings: {
+                startWithWindows: false,
+                minimizeToTray: true,
+                checkUpdates: true,
+                confirmBeforeStop: true,
+                autoStopOnExit: false,
+                defaultServerPath: 'C:\\Mineserver\\Servers',
+                autoDetectJava: true,
+                defaultRam: 4,
+                jvmArgs: '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200',
+                autoPortForward: true,
+                playitEnabled: false,
+                defaultPort: 25565,
+                accentColor: 'green',
+                animations: true,
+                compactMode: false,
+                autoBackup: true,
+                backupInterval: 60,
+                maxBackups: 5,
+                backupPath: 'C:\\Mineserver\\Backups',
+                backupBeforeUpdate: true,
+            },
+            setSettings: (newSettings) =>
+                set((state) => ({ settings: { ...state.settings, ...newSettings } })),
         }),
         {
             name: 'mineserver-storage',
@@ -224,6 +282,7 @@ export const useAppStore = create<AppState>()(
                 servers: state.servers,
                 sidebarCollapsed: state.sidebarCollapsed,
                 streamerMode: state.streamerMode,
+                settings: state.settings,
             }),
         }
     )

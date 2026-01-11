@@ -129,7 +129,7 @@ export function CreateServer() {
             await invoke('download_server', {
                 serverType: data.type,
                 version: data.version,
-                outputPath: serverPath
+                serverPath: serverPath
             });
             const newServer = {
                 id: generateId(),

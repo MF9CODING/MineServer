@@ -112,36 +112,11 @@ function SliderSetting({ label, description, value, onChange, min, max, step, un
 }
 
 export function Settings() {
-    const { streamerMode, toggleStreamerMode } = useAppStore();
+    const { streamerMode, toggleStreamerMode, settings, setSettings } = useAppStore();
     const [activeSection, setActiveSection] = useState('general');
     const [saved, setSaved] = useState(false);
-    const [settings, setSettings] = useState({
-        // General
-        startWithWindows: false,
-        minimizeToTray: true,
-        checkUpdates: true,
-        confirmBeforeStop: true,
-        autoStopOnExit: false,
-        defaultServerPath: 'C:\\Mineserver\\Servers',
-        // Java
-        autoDetectJava: true,
-        defaultRam: 4,
-        jvmArgs: '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200',
-        // Network
-        autoPortForward: true,
-        playitEnabled: false,
-        defaultPort: 25565,
-        // Appearance
-        accentColor: 'green',
-        animations: true,
-        compactMode: false,
-        // Backups
-        autoBackup: true,
-        backupInterval: 60,
-        maxBackups: 5,
-        backupPath: 'C:\\Mineserver\\Backups',
-        backupBeforeUpdate: true,
-    });
+
+    // Removed local settings state, using useAppStore directly
 
     const [checkingUpdate, setCheckingUpdate] = useState(false);
 
@@ -179,7 +154,7 @@ export function Settings() {
     };
 
     const handleChange = (key: string, value: any) => {
-        setSettings({ ...settings, [key]: value });
+        setSettings({ [key]: value });
         setSaved(false);
     };
 
