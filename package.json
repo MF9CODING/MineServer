@@ -1,7 +1,7 @@
 {
   "name": "mineserver",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.0",
   "type": "module",
   "description": "The Ultimate Minecraft Server Manager built with Tauri, React, and Rust.",
   "author": "MF9CODING",

@@ -1,6 +1,6 @@
 [package]
 name = "mineserver"
-version = "0.1.2"
+version = "0.1.0"
 description = "Mineserver - Minecraft Server Manager"
 authors = ["you"]
 edition = "2021"
