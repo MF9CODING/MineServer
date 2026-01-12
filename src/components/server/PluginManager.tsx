@@ -372,7 +372,10 @@ export function PluginManager({ server }: PluginManagerProps) {
                                         </div>
                                         <div className="mt-auto flex items-center justify-between pt-3 border-t border-white/5">
                                             <span className="flex items-center gap-1.5 text-xs text-text-muted font-mono"><Download className="w-3 h-3" />{formatDownloads(plugin.downloads)}</span>
-                                            <button onClick={() => openVersionModal(plugin)} className="px-3 py-1.5 text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 bg-purple-500 hover:bg-purple-600 shadow-lg shadow-purple-500/10">
+                                            <button
+                                                onClick={() => openVersionModal(plugin)}
+                                                disabled={!!installingPlugin}
+                                                className="px-3 py-1.5 text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 bg-purple-500 hover:bg-purple-600 shadow-lg shadow-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                                                 <Download className="w-3 h-3" /> Install
                                             </button>
                                         </div>
