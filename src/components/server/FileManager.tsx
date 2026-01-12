@@ -477,9 +477,10 @@ export function FileManager({ serverPath }: FileManagerProps) {
                                 if (hasUnsavedChanges && !confirm("You have unsaved changes. Discard them?")) return;
                                 setEditingFile(null);
                             }}
-                            className="px-3 py-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-white text-xs font-bold transition-colors"
+                            className="px-3 py-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-white text-xs font-bold transition-colors flex items-center gap-1.5"
                         >
-                            Cancel
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                            Back
                         </button>
                         <button
                             onClick={saveFile}
@@ -505,7 +506,7 @@ export function FileManager({ serverPath }: FileManagerProps) {
                         }
                     />
                 </div>
-            </div>
+            </div >
         );
     }
 

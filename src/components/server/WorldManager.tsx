@@ -3,7 +3,7 @@ import { Server } from '../../stores/appStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
-import { save } from '@tauri-apps/plugin-dialog';
+import { save, open } from '@tauri-apps/plugin-dialog';
 import {
     Globe, Upload, Trash2, RefreshCw, AlertTriangle,
     HardDrive, Flame, Ghost, FolderOpen,
@@ -87,6 +87,12 @@ export default function WorldManager({ server }: WorldManagerProps) {
     const [spawnMonsters, setSpawnMonsters] = useState(true);
     const [allowNether, setAllowNether] = useState(true);
 
+    // Import State
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importPath, setImportPath] = useState('');
+    const [importName, setImportName] = useState('');
+    const [isImporting, setIsImporting] = useState(false);
+
     // Upload refs for each dimension
     const overworldInputRef = useRef<HTMLInputElement>(null);
     const netherInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +118,58 @@ export default function WorldManager({ server }: WorldManagerProps) {
 
         } catch (e) {
             console.error("Failed to get world info", e);
+        }
+    };
+
+    const handleImportClick = async () => {
+        try {
+            const selected = await open({
+                multiple: false,
+                filters: [{ name: 'World Archive', extensions: ['zip', 'mcworld'] }]
+            });
+
+            if (selected && typeof selected === 'string') {
+                // Extract filename as default import name
+                const filename = selected.split(/[\\/]/).pop()?.replace(/\.(zip|mcworld)$/i, '') || 'imported-world';
+                setImportPath(selected);
+                setImportName(filename);
+                setShowImportModal(true);
+            }
+        } catch (e) {
+            toast.error("Failed to open file dialog");
+        }
+    };
+
+    const handleImportConfirm = async () => {
+        if (!importPath || !importName.trim()) {
+            toast.error("Please provide a valid world name");
+            return;
+        }
+
+        // Basic validation
+        if (allWorlds.includes(importName)) {
+            toast.error("A world with this name already exists");
+            return;
+        }
+
+        setIsImporting(true);
+        const toastId = toast.loading("Importing world...");
+        setShowImportModal(false);
+
+        try {
+            await invoke('import_world', {
+                serverPath: server.path,
+                zipPath: importPath,
+                newLevelName: importName
+            });
+            toast.success("Domination! World imported successfully.", { id: toastId });
+            fetchInfo();
+        } catch (e: any) {
+            toast.error("Import failed: " + (e.message || e), { id: toastId });
+        } finally {
+            setIsImporting(false);
+            setImportPath('');
+            setImportName('');
         }
     };
 
@@ -423,8 +481,16 @@ export default function WorldManager({ server }: WorldManagerProps) {
                     </div>
                     <div className="flex gap-2">
                         <button
+                            onClick={handleImportClick}
+                            disabled={isRegenerating || isImporting || server.status === 'running'}
+                            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+                        >
+                            <Upload className={cn("w-4 h-4", isImporting && "animate-spin")} />
+                            Import
+                        </button>
+                        <button
                             onClick={() => openRegenModal('all')}
-                            disabled={isRegenerating || server.status === 'running'}
+                            disabled={isRegenerating || isImporting || server.status === 'running'}
                             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
                         >
                             <RefreshCw className={cn("w-4 h-4", isRegenerating && "animate-spin")} />
@@ -554,145 +620,204 @@ export default function WorldManager({ server }: WorldManagerProps) {
                 )}
             </div>
 
-            {/* Regeneration Modal */}
-            {showRegenModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-[#161b22] border border-border rounded-2xl w-full max-w-xl p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                <RefreshCw className="w-5 h-5 text-orange-400" />
-                                {regenTarget === 'all' ? 'Create New World' : `Reset ${DIMENSION_INFO[regenTarget]?.name || regenTarget}`}
-                            </h2>
-                            <button onClick={() => setShowRegenModal(false)} className="p-2 hover:bg-surface rounded-lg transition-colors">
-                                <X className="w-5 h-5 text-text-muted" />
-                            </button>
-                        </div>
 
-                        <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto">
-                            {/* Seed */}
-                            <div>
-                                <label className="text-xs font-bold text-text-muted uppercase mb-1.5 block">World Seed</label>
-                                <input
-                                    value={seed}
-                                    onChange={(e) => setSeed(e.target.value)}
-                                    placeholder="Leave empty for random seed"
-                                    className="w-full bg-[#0d1117] border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-primary"
-                                />
+
+            {/* Import Modal */}
+            {
+                showImportModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                        <div className="bg-[#161b22] border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <Upload className="w-5 h-5 text-blue-400" />
+                                    Import World
+                                </h2>
+                                <button onClick={() => setShowImportModal(false)} className="p-2 hover:bg-surface rounded-lg transition-colors">
+                                    <X className="w-5 h-5 text-text-muted" />
+                                </button>
                             </div>
 
-                            {/* World Type */}
-                            <div>
-                                <label className="text-xs font-bold text-text-muted uppercase mb-2 block">World Type</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {WORLD_TYPES.map((type) => (
-                                        <button
-                                            key={type.id}
-                                            onClick={() => setLevelType(type.id)}
-                                            className={cn(
-                                                "p-3 rounded-xl border text-left transition-all",
-                                                levelType === type.id
-                                                    ? "bg-primary/20 border-primary"
-                                                    : "bg-surface/50 border-border hover:border-white/20"
-                                            )}
-                                        >
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <type.icon className={cn("w-4 h-4", levelType === type.id ? "text-primary" : "text-text-muted")} />
-                                                <span className="font-bold text-white text-sm">{type.name}</span>
-                                            </div>
-                                            <p className="text-xs text-text-muted">{type.description}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Difficulty */}
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="text-xs font-bold text-text-muted uppercase mb-1.5 block">Difficulty</label>
-                                    <select
-                                        value={difficulty}
-                                        onChange={(e) => setDifficulty(e.target.value)}
-                                        className="w-full bg-[#0d1117] border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-primary appearance-none cursor-pointer"
+                                    <label className="text-xs font-bold text-text-muted uppercase mb-1.5 block">File Path</label>
+                                    <div className="p-3 bg-black/30 rounded-lg border border-white/5 text-xs font-mono text-text-muted break-all">
+                                        {importPath}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-text-muted uppercase mb-1.5 block">New World Name</label>
+                                    <input
+                                        value={importName}
+                                        onChange={(e) => setImportName(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))} // Basic sanitation
+                                        placeholder="my_imported_world"
+                                        className="w-full bg-[#0d1117] border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-blue-500 transition-colors"
+                                        autoFocus
+                                    />
+                                    <p className="text-[10px] text-text-muted mt-1">Only alphanumeric, dashes, and underscores allowed.</p>
+                                </div>
+
+                                <div className="pt-2 flex justify-end gap-2">
+                                    <button
+                                        onClick={() => setShowImportModal(false)}
+                                        className="px-4 py-2 rounded-lg font-bold text-sm bg-surface hover:bg-surface-hover text-text-muted hover:text-white transition-colors"
                                     >
-                                        <option value="peaceful">Peaceful</option>
-                                        <option value="easy">Easy</option>
-                                        <option value="normal">Normal</option>
-                                        <option value="hard">Hard</option>
-                                    </select>
-                                </div>
-                                <div className="flex flex-col justify-end">
-                                    <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
-                                        <input
-                                            type="checkbox"
-                                            checked={hardcore}
-                                            onChange={e => setHardcore(e.target.checked)}
-                                            className="w-4 h-4 rounded accent-red-500"
-                                        />
-                                        <span className="text-sm text-red-400 font-bold">Hardcore Mode</span>
-                                    </label>
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleImportConfirm}
+                                        className="px-6 py-2 rounded-lg font-bold text-sm bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all"
+                                    >
+                                        Import World
+                                    </button>
                                 </div>
                             </div>
-
-                            {/* Feature Toggles */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
-                                    <input type="checkbox" checked={structures} onChange={e => setStructures(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
-                                    <div>
-                                        <span className="text-sm text-white font-bold block">Structures</span>
-                                        <span className="text-xs text-text-muted">Villages, Temples, etc</span>
-                                    </div>
-                                </label>
-                                <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
-                                    <input type="checkbox" checked={spawnAnimals} onChange={e => setSpawnAnimals(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
-                                    <div>
-                                        <span className="text-sm text-white font-bold block">Spawn Animals</span>
-                                        <span className="text-xs text-text-muted">Passive mobs</span>
-                                    </div>
-                                </label>
-                                <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
-                                    <input type="checkbox" checked={spawnMonsters} onChange={e => setSpawnMonsters(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
-                                    <div>
-                                        <span className="text-sm text-white font-bold block">Spawn Monsters</span>
-                                        <span className="text-xs text-text-muted">Hostile mobs</span>
-                                    </div>
-                                </label>
-                                <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
-                                    <input type="checkbox" checked={allowNether} onChange={e => setAllowNether(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
-                                    <div>
-                                        <span className="text-sm text-white font-bold block">Allow Nether</span>
-                                        <span className="text-xs text-text-muted">Nether portals work</span>
-                                    </div>
-                                </label>
-                            </div>
-
-                            {/* Warning */}
-                            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 flex gap-3 items-center">
-                                <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0" />
-                                <p className="text-xs text-orange-400">
-                                    This will permanently DELETE {regenTarget === 'all' ? 'the current world and all dimensions' : `the ${DIMENSION_INFO[regenTarget]?.name}`}.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowRegenModal(false)}
-                                className="flex-1 py-2.5 rounded-xl bg-surface hover:bg-surface-hover text-text font-bold transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleRegenerate}
-                                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold transition-colors shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2"
-                            >
-                                <RefreshCw className="w-4 h-4" />
-                                {regenTarget === 'all' ? 'Create World' : 'Reset Dimension'}
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {/* Regeneration Modal */}
+            {
+                showRegenModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                        <div className="bg-[#161b22] border border-border rounded-2xl w-full max-w-xl p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <RefreshCw className="w-5 h-5 text-orange-400" />
+                                    {regenTarget === 'all' ? 'Create New World' : `Reset ${DIMENSION_INFO[regenTarget]?.name || regenTarget}`}
+                                </h2>
+                                <button onClick={() => setShowRegenModal(false)} className="p-2 hover:bg-surface rounded-lg transition-colors">
+                                    <X className="w-5 h-5 text-text-muted" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto">
+                                {/* Seed */}
+                                <div>
+                                    <label className="text-xs font-bold text-text-muted uppercase mb-1.5 block">World Seed</label>
+                                    <input
+                                        value={seed}
+                                        onChange={(e) => setSeed(e.target.value)}
+                                        placeholder="Leave empty for random seed"
+                                        className="w-full bg-[#0d1117] border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-primary"
+                                    />
+                                </div>
+
+                                {/* World Type */}
+                                <div>
+                                    <label className="text-xs font-bold text-text-muted uppercase mb-2 block">World Type</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {WORLD_TYPES.map((type) => (
+                                            <button
+                                                key={type.id}
+                                                onClick={() => setLevelType(type.id)}
+                                                className={cn(
+                                                    "p-3 rounded-xl border text-left transition-all",
+                                                    levelType === type.id
+                                                        ? "bg-primary/20 border-primary"
+                                                        : "bg-surface/50 border-border hover:border-white/20"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <type.icon className={cn("w-4 h-4", levelType === type.id ? "text-primary" : "text-text-muted")} />
+                                                    <span className="font-bold text-white text-sm">{type.name}</span>
+                                                </div>
+                                                <p className="text-xs text-text-muted">{type.description}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Difficulty */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-text-muted uppercase mb-1.5 block">Difficulty</label>
+                                        <select
+                                            value={difficulty}
+                                            onChange={(e) => setDifficulty(e.target.value)}
+                                            className="w-full bg-[#0d1117] border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-primary appearance-none cursor-pointer"
+                                        >
+                                            <option value="peaceful">Peaceful</option>
+                                            <option value="easy">Easy</option>
+                                            <option value="normal">Normal</option>
+                                            <option value="hard">Hard</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col justify-end">
+                                        <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                                            <input
+                                                type="checkbox"
+                                                checked={hardcore}
+                                                onChange={e => setHardcore(e.target.checked)}
+                                                className="w-4 h-4 rounded accent-red-500"
+                                            />
+                                            <span className="text-sm text-red-400 font-bold">Hardcore Mode</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Feature Toggles */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
+                                        <input type="checkbox" checked={structures} onChange={e => setStructures(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                                        <div>
+                                            <span className="text-sm text-white font-bold block">Structures</span>
+                                            <span className="text-xs text-text-muted">Villages, Temples, etc</span>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
+                                        <input type="checkbox" checked={spawnAnimals} onChange={e => setSpawnAnimals(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                                        <div>
+                                            <span className="text-sm text-white font-bold block">Spawn Animals</span>
+                                            <span className="text-xs text-text-muted">Passive mobs</span>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
+                                        <input type="checkbox" checked={spawnMonsters} onChange={e => setSpawnMonsters(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                                        <div>
+                                            <span className="text-sm text-white font-bold block">Spawn Monsters</span>
+                                            <span className="text-xs text-text-muted">Hostile mobs</span>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-center gap-3 p-3 bg-surface/50 border border-border rounded-xl cursor-pointer hover:border-white/20 transition-colors">
+                                        <input type="checkbox" checked={allowNether} onChange={e => setAllowNether(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                                        <div>
+                                            <span className="text-sm text-white font-bold block">Allow Nether</span>
+                                            <span className="text-xs text-text-muted">Nether portals work</span>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                {/* Warning */}
+                                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 flex gap-3 items-center">
+                                    <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0" />
+                                    <p className="text-xs text-orange-400">
+                                        This will permanently DELETE {regenTarget === 'all' ? 'the current world and all dimensions' : `the ${DIMENSION_INFO[regenTarget]?.name}`}.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowRegenModal(false)}
+                                    className="flex-1 py-2.5 rounded-xl bg-surface hover:bg-surface-hover text-text font-bold transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleRegenerate}
+                                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold transition-colors shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2"
+                                >
+                                    <RefreshCw className="w-4 h-4" />
+                                    {regenTarget === 'all' ? 'Create World' : 'Reset Dimension'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }
 

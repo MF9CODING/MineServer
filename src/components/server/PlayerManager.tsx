@@ -44,6 +44,9 @@ export function PlayerManager({
     const [activeTab, setActiveTab] = useState<PlayerTab>('online');
     const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
     const [newPlayer, setNewPlayer] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showTeleportModal, setShowTeleportModal] = useState(false);
+    const [tpCoords, setTpCoords] = useState("");
 
     // Data Lists
     const [ops, setOps] = useState<PlayerEntry[]>([]);
@@ -385,7 +388,7 @@ export function PlayerManager({
         );
     };
 
-    const [searchQuery, setSearchQuery] = useState('');
+
 
     const getFilteredList = () => {
         let list: any[] = [];
@@ -414,8 +417,74 @@ export function PlayerManager({
         { id: 'banned-ips' as PlayerTab, label: 'IP Bans', icon: Ban, count: bannedIps.length, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
     ];
 
+
+
+    const handleTeleport = async () => {
+        if (!selectedPlayer || !tpCoords.trim()) return;
+        await cmd(`tp ${selectedPlayer} ${tpCoords}`);
+        setShowTeleportModal(false);
+        setTpCoords("");
+    };
+
     return (
         <div className="flex flex-col h-full bg-[#0d1117]">
+            {/* Teleport Modal */}
+            {showTeleportModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
+                    <div className="bg-[#161b22] border border-border rounded-xl w-full max-w-sm p-5 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setShowTeleportModal(false)} className="absolute top-4 right-4 text-text-muted hover:text-white"><UserX className="w-4 h-4 rotate-45" /></button>
+                        <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Map className="w-5 h-5 text-primary" /> Teleport {selectedPlayer}</h3>
+
+                        <div className="space-y-5">
+                            {/* Option 1: To Player */}
+                            <div>
+                                <label className="text-xs font-bold text-text-muted mb-2 block uppercase tracking-wider">To Another Player</label>
+                                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                                    {activePlayers.filter(p => p !== selectedPlayer).length === 0 ? (
+                                        <p className="text-xs text-text-muted col-span-2 italic text-center py-2">No other players online</p>
+                                    ) : (
+                                        activePlayers.filter(p => p !== selectedPlayer).map(p => (
+                                            <button
+                                                key={p}
+                                                onClick={() => { cmd(`tp ${selectedPlayer} ${p}`); setShowTeleportModal(false); }}
+                                                className="flex items-center gap-2 p-2 rounded-lg bg-surface border border-border hover:border-primary/50 hover:bg-primary/10 transition-all text-left"
+                                            >
+                                                <img src={`https://minotar.net/avatar/${p}/24.png`} className="w-6 h-6 rounded-md" />
+                                                <span className="text-xs font-bold text-white truncate">{p}</span>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="relative">
+                                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/50"></div></div>
+                                <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#161b22] px-2 text-text-muted">OR Coordinates</span></div>
+                            </div>
+
+                            {/* Option 2: Coordinates */}
+                            <div className="flex gap-2">
+                                <input
+                                    value={tpCoords}
+                                    onChange={(e) => setTpCoords(e.target.value)}
+                                    placeholder="x y z"
+                                    className="flex-1 bg-black/30 border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-primary font-mono text-sm"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleTeleport()}
+                                />
+                                <button
+                                    onClick={handleTeleport}
+                                    disabled={!tpCoords.trim()}
+                                    className="px-4 bg-primary text-black font-bold rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors"
+                                >
+                                    Go
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-text-muted text-center">Use <code>~</code> for relative. Example: <code>~ 100 ~</code></p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="p-4 border-b border-border/50 bg-[#161b22]">
                 <div className="flex items-center justify-between mb-4">

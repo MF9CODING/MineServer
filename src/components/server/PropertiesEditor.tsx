@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     Settings, Save, RefreshCw, Users, Gamepad2, Shield, Globe,
-    Plane, Target, Package, AlertTriangle, Server, Zap
+    Plane, Target, Package, AlertTriangle, Server, Zap, Upload, Image as ImageIcon,
+    Bold, Italic, Underline, Strikethrough, Eraser, Type
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
@@ -137,6 +138,230 @@ const BEDROCK_PROPERTIES: PropertyField[] = [
 
 const JAVA_CATEGORIES = ['Gameplay', 'Security', 'World', 'Server', 'Resources'];
 const BEDROCK_CATEGORIES = ['Gameplay', 'Security', 'World', 'Server', 'Anti-Cheat'];
+
+
+
+function MotdEditor({ value, onChange, label, description, icon: Icon, isBedrock }: any) {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Robust Minecraft MOTD Parser
+    const parseMotd = (text: string) => {
+        if (!text) return "";
+
+        // 1. Normalize all valid color code prefixes to §
+        // Matches & or literal \u00A7 followed by a valid code char
+        // We use a capture group for the code to confirm it's valid, but we don't capture the prefix
+        const normalized = text
+            .replace(/&(?=[0-9a-fk-or])/gi, '§')
+            .replace(/\\u00A7(?=[0-9a-fk-or])/gi, '§');
+
+        // 2. Split by § to get segments
+        const parts = normalized.split('§');
+
+        // State
+        let styles = {
+            color: '',
+            bold: false,
+            italic: false,
+            underline: false,
+            strikethrough: false,
+            obfuscated: false
+        };
+
+        let html = "";
+
+        // Helper to escape HTML content
+        const escapeHtml = (str: string) => str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Color Definitions
+        const colorMap: Record<string, string> = {
+            '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA',
+            '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA',
+            '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF',
+            'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF',
+            'g': '#DDD605', // Bedrock Minecoin Gold
+        };
+
+        // Process parts
+        parts.forEach((part, index) => {
+            // First part is always plain text (unless string starts with §)
+            if (index === 0) {
+                if (part) html += escapeHtml(part);
+                return;
+            }
+
+            // Extract code and content
+            // If the split resulted in empty string (e.g. §a§l), part is empty. 
+            // We still parse the "code" (which isn't there? wait.)
+            // "§a§lText". Split: ["", "a", "lText"].
+            // Index 1: "a". Code='a', Content="". Update style. Content empty -> no span.
+            // Index 2: "lText". Code='l', Content="Text". Update style. Content -> valid span.
+
+            if (part.length === 0) return; // Should not happen if followed by char?
+            // Actually split '§a' -> ["", "a"]. "a" has length 1.
+            // If '§' is at end? "Text§". Split ["Text", ""].
+            // Index 1 is "". code undefined.
+
+            if (part.length === 0) return;
+
+            const code = part.charAt(0).toLowerCase();
+            const content = part.slice(1);
+
+            // Update State
+            if (colorMap[code]) {
+                // Color resets all formatting
+                styles = {
+                    color: colorMap[code],
+                    bold: false,
+                    italic: false,
+                    underline: false,
+                    strikethrough: false,
+                    obfuscated: false
+                };
+            } else {
+                // Formatting codes accumulate
+                switch (code) {
+                    case 'l': styles.bold = true; break;
+                    case 'm': styles.strikethrough = true; break;
+                    case 'n': styles.underline = true; break;
+                    case 'o': styles.italic = true; break;
+                    case 'k': styles.obfuscated = true; break;
+                    case 'r': // Reset all
+                        styles = {
+                            color: '',
+                            bold: false,
+                            italic: false,
+                            underline: false,
+                            strikethrough: false,
+                            obfuscated: false
+                        };
+                        break;
+                }
+            }
+
+            // Generate HTML for this segment
+            if (content) {
+                // Handle text-decoration combinations
+                const decorations = [];
+                if (styles.underline) decorations.push('underline');
+                if (styles.strikethrough) decorations.push('line-through');
+                const decorationStyle = decorations.length > 0 ? `text-decoration: ${decorations.join(' ')}` : '';
+
+                const finalStyle = [
+                    styles.color ? `color: ${styles.color}` : '',
+                    styles.bold ? 'font-weight: bold' : '',
+                    styles.italic ? 'font-style: italic' : '',
+                    decorationStyle
+                ].filter(Boolean).join('; ');
+
+                html += `<span style="${finalStyle}">${escapeHtml(content)}</span>`;
+            }
+        });
+
+        return html || '<span class="opacity-30 italic">No MOTD</span>';
+    };
+
+    const insertCode = (code: string) => {
+        if (!inputRef.current) return;
+        const start = inputRef.current.selectionStart || 0;
+        const end = inputRef.current.selectionEnd || 0;
+        const newValue = value.substring(0, start) + `\u00A7${code}` + value.substring(end);
+
+        onChange(newValue);
+
+        setTimeout(() => {
+            if (inputRef.current) {
+                inputRef.current.selectionStart = inputRef.current.selectionEnd = start + 2;
+                inputRef.current.focus();
+            }
+        }, 0);
+    };
+
+    return (
+        <div className="bg-[#161b22] rounded-xl p-4 border border-border/30 hover:border-border/50 transition-colors">
+            <div className="flex flex-col gap-4">
+                <div className="flex items-start gap-3">
+                    <div className={cn("p-2 rounded-lg", isBedrock ? "bg-green-500/10 text-green-400" : "bg-primary/10 text-primary")}>
+                        <Icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-medium text-white">{label}</h3>
+                        <p className="text-xs text-text-muted">{description}</p>
+                    </div>
+                </div>
+
+                {/* Editor Toolbar */}
+                <div className="bg-black/40 rounded-t-xl border border-border/50 p-2 flex flex-col gap-2">
+                    {/* Colors */}
+                    <div className="flex flex-wrap gap-1">
+                        {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'].map(code => (
+                            <button
+                                key={code}
+                                type="button"
+                                onClick={() => insertCode(code)}
+                                className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold hover:scale-110 transition-transform bg-surface border border-white/10"
+                                style={{ color: { '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA', '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA', '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF', 'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF' }[code] }}
+                                title={`Color §${code}`}
+                            >
+                                A
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Formatting */}
+                    <div className="flex flex-wrap gap-1 border-t border-white/5 pt-2">
+                        <button onClick={() => insertCode('l')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-surface hover:bg-white/10 text-xs font-bold text-white border border-white/5" title="Bold (§l)">
+                            <Bold className="w-3 h-3" /> Bold
+                        </button>
+                        <button onClick={() => insertCode('o')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-surface hover:bg-white/10 text-xs italic text-white border border-white/5" title="Italic (§o)">
+                            <Italic className="w-3 h-3" /> Italic
+                        </button>
+                        <button onClick={() => insertCode('n')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-surface hover:bg-white/10 text-xs underline text-white border border-white/5" title="Underline (§n)">
+                            <Underline className="w-3 h-3" /> Underline
+                        </button>
+                        <button onClick={() => insertCode('m')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-surface hover:bg-white/10 text-xs line-through text-white border border-white/5" title="Strikethrough (§m)">
+                            <Strikethrough className="w-3 h-3" /> Strike
+                        </button>
+                        <button onClick={() => insertCode('k')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-surface hover:bg-white/10 text-xs text-white border border-white/5" title="Obfuscated (§k)">
+                            <Type className="w-3 h-3" /> Magic
+                        </button>
+                        <div className="w-[1px] h-6 bg-white/10 mx-1" />
+                        <button onClick={() => insertCode('r')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-white/10 hover:bg-white/20 text-xs font-bold text-red-300 border border-white/5" title="Reset (§r)">
+                            <Eraser className="w-3 h-3" /> Reset
+                        </button>
+                    </div>
+                </div>
+
+                {/* Input */}
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-full bg-surface border-x border-b border-border/50 rounded-b-xl px-3 py-3 text-sm text-white outline-none focus:border-primary font-mono rounded-t-none"
+                    placeholder="A Minecraft Server"
+                />
+
+                {/* Live Preview */}
+                <div className="mt-2">
+                    <div className="text-[10px] font-bold text-text-muted uppercase mb-1 ml-1">Live Preview</div>
+                    <div className="bg-[#0d1117] p-3 rounded-lg border border-border/30 flex items-center gap-3">
+                        <img src="/src/assets/server-icon-placeholder.png" className="w-10 h-10 opacity-70 grayscale" alt="icon" />
+                        <div>
+                            <div className="text-sm text-white font-medium mb-0.5">Minecraft Server</div>
+                            <div className="text-xs font-mono whitespace-pre-wrap leading-tight" dangerouslySetInnerHTML={{
+                                __html: parseMotd(value)
+                            }} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export function PropertiesEditor({ serverPath, serverType, serverName }: PropertiesEditorProps) {
     const [properties, setProperties] = useState<Record<string, string>>({});
@@ -298,6 +523,59 @@ export function PropertiesEditor({ serverPath, serverType, serverName }: Propert
 
             {/* Properties List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {/* Server Icon / Branding (Added based on user request) */}
+                <div className="bg-[#161b22] border border-border/30 rounded-xl p-4 flex items-center gap-4 hover:border-border/50 transition-colors">
+                    <div className="w-16 h-16 bg-black/40 rounded-lg border border-border/50 flex items-center justify-center relative group overflow-hidden shrink-0">
+                        <img
+                            src="https://api.mineskin.org/render/head?url=http://textures.minecraft.net/texture/292009a4925b58f02c77d69bf69792a105ce624692e4065292437367ce7a5"
+                            className="w-full h-full object-cover opacity-50 group-hover:opacity-30 transition-all"
+                            alt="Server Icon"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Upload className="w-6 h-6 text-white" />
+                        </div>
+                        <input
+                            type="file"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            accept="image/png"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+
+                                if (file.type !== 'image/png') {
+                                    toast.error("Server icon must be a PNG image.");
+                                    return;
+                                }
+                                if (file.size > 100 * 1024) toast.warning("Icon is large. Minecraft requires 64x64px.");
+
+                                try {
+                                    toast.loading("Uploading icon...", { id: 'icon-upload' });
+                                    const buf = await file.arrayBuffer();
+                                    await invoke('write_binary_file', {
+                                        path: `${serverPath}\\server-icon.png`,
+                                        content: Array.from(new Uint8Array(buf))
+                                    });
+                                    toast.success("Server icon updated!", { id: 'icon-upload' });
+                                } catch (err) {
+                                    toast.error("Failed to upload: " + err, { id: 'icon-upload' });
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                            Server Icon <ImageIcon className="w-3.5 h-3.5 text-text-muted" />
+                        </h3>
+                        <p className="text-xs text-text-muted mt-1 max-w-lg">
+                            Upload a <strong className="text-white">64x64 PNG</strong> image to be displayed in the multiplayer server list.
+                            This will replace `server-icon.png`.
+                        </p>
+                    </div>
+                    <button className="px-3 py-1.5 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold transition-colors whitespace-nowrap">
+                        Upload PNG
+                    </button>
+                </div>
+
                 {Object.keys(properties).length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted">
                         <div className="w-16 h-16 bg-surface/30 rounded-full flex items-center justify-center mb-4">
@@ -324,6 +602,20 @@ export function PropertiesEditor({ serverPath, serverType, serverName }: Propert
                         const Icon = field.icon || Zap;
                         const currentValue = properties[field.key] || '';
                         const displayValue = field.invert ? (currentValue === 'true' ? 'false' : 'true') : currentValue;
+
+                        if (field.key === 'motd') {
+                            return (
+                                <MotdEditor
+                                    key={field.key}
+                                    value={currentValue}
+                                    onChange={(val: string) => updateProperty(field.key, val)}
+                                    label={field.label}
+                                    description={field.description}
+                                    icon={Icon}
+                                    isBedrock={isBedrock}
+                                />
+                            );
+                        }
 
                         return (
                             <div key={field.key} className="bg-[#161b22] rounded-xl p-4 border border-border/30 hover:border-border/50 transition-colors">

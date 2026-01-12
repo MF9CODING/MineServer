@@ -87,7 +87,7 @@ export function ServerCard({ server, onStart, onStop, onSettings, onDelete, onCl
                     {/* Action Button - Reduced Width */}
                     {isOnline ? (
                         <button
-                            onClick={onStop}
+                            onClick={(e) => { e.stopPropagation(); onStop?.(); }}
                             className="h-10 w-28 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-black border border-red-500/50 hover:border-red-500 rounded-lg flex items-center justify-center gap-2 transition-all font-bold tracking-wide shadow-lg shadow-red-500/10 active:scale-95 group"
                         >
                             <Square className="w-4 h-4 fill-current" />
@@ -95,7 +95,7 @@ export function ServerCard({ server, onStart, onStop, onSettings, onDelete, onCl
                         </button>
                     ) : (
                         <button
-                            onClick={onStart}
+                            onClick={(e) => { e.stopPropagation(); onStart?.(); }}
                             className="h-10 w-28 bg-primary hover:bg-primary-hover text-black font-bold rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 active:scale-95 group relative overflow-hidden"
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
@@ -114,7 +114,7 @@ export function ServerCard({ server, onStart, onStop, onSettings, onDelete, onCl
                             <Settings className="w-4 h-4" />
                         </button>
                         <button
-                            onClick={onDelete}
+                            onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
                             className="p-1.5 rounded-md text-text-muted hover:text-red-400 hover:bg-white/5 transition-colors"
                             title="Delete"
                         >

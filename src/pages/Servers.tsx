@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import { Plus, Search, Filter, Grid, List, Server, Zap, Users, Activity, Sparkles } from 'lucide-react';
 import { useAppStore, ServerType } from '../stores/appStore';
 import { ServerCard } from '../components/cards/ServerCard';
@@ -18,7 +20,7 @@ const serverTypeFilters: { value: ServerType | 'all'; label: string }[] = [
 
 export function Servers() {
     const navigate = useNavigate();
-    const { servers } = useAppStore();
+    const { servers, deleteServer, toggleServerStatus } = useAppStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState<ServerType | 'all'>('all');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -145,8 +147,8 @@ export function Servers() {
                         <button
                             onClick={() => setViewMode('list')}
                             className={`p-2 rounded-md transition-all ${viewMode === 'list'
-                                    ? 'bg-primary/20 text-primary shadow-sm'
-                                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                                ? 'bg-primary/20 text-primary shadow-sm'
+                                : 'text-text-muted hover:text-white hover:bg-white/5'
                                 }`}
                         >
                             <List className="w-4 h-4" />
@@ -154,8 +156,8 @@ export function Servers() {
                         <button
                             onClick={() => setViewMode('grid')}
                             className={`p-2 rounded-md transition-all ${viewMode === 'grid'
-                                    ? 'bg-primary/20 text-primary shadow-sm'
-                                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                                ? 'bg-primary/20 text-primary shadow-sm'
+                                : 'text-text-muted hover:text-white hover:bg-white/5'
                                 }`}
                         >
                             <Grid className="w-4 h-4" />
@@ -183,8 +185,40 @@ export function Servers() {
                                     <ServerCard
                                         server={server}
                                         onClick={() => navigate(`/servers/${server.id}`)}
-                                        onStart={() => console.log('Start', server.id)}
-                                        onStop={() => console.log('Stop', server.id)}
+                                        onStart={async () => {
+                                            toast.success(`Starting ${server.name}...`);
+                                            try {
+                                                const jarName = server.type === 'bedrock' ? 'bedrock_server.exe' : 'server.jar';
+                                                await invoke('start_server', {
+                                                    id: server.id,
+                                                    path: server.path,
+                                                    jarFile: jarName,
+                                                    ram: server.allocatedRam || 4096
+                                                });
+                                                toggleServerStatus(server.id);
+                                            } catch (err) {
+                                                toast.error(`Failed to start: ${err}`);
+                                            }
+                                        }}
+                                        onStop={async () => {
+                                            toast.info(`Stopping ${server.name}...`);
+                                            try {
+                                                await invoke('stop_server', { id: server.id });
+                                                toggleServerStatus(server.id);
+                                            } catch (err) {
+                                                toast.error(`Failed to stop: ${err}`);
+                                            }
+                                        }}
+                                        onDelete={async () => {
+                                            if (confirm("⚠️ This server will be PERMANENTLY DELETED. Continue?")) {
+                                                try {
+                                                    await deleteServer(server.id);
+                                                    toast.success("Server deleted");
+                                                } catch (e) {
+                                                    toast.error("Failed to delete server");
+                                                }
+                                            }
+                                        }}
                                         onSettings={() => navigate(`/servers/${server.id}`)}
                                     />
                                 </motion.div>

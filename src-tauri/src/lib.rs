@@ -1,6 +1,8 @@
 pub mod models;
 pub mod commands;
 
+use tauri::Manager;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -9,11 +11,11 @@ fn greet(name: &str) -> String {
 
 pub fn run() {
     tauri::Builder::default()
-    .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_updater::Builder::new().build())
-    .manage(commands::runner::ServerProcessState::new())
-    .manage(commands::system::SystemState::new())
-    .manage(commands::network_manager::NetworkState::new())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(commands::runner::ServerProcessState::new())
+        .manage(commands::system::SystemState::new())
+        .manage(commands::network_manager::NetworkState::new())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             commands::server::delete_server,
@@ -33,6 +35,7 @@ pub fn run() {
             commands::server::write_binary_file,
             commands::system::get_system_info,
             commands::system::get_local_ip,
+            commands::system::factory_reset,
 
 
             commands::versions::get_nukkit_versions,
@@ -60,6 +63,7 @@ pub fn run() {
             commands::world_manager::upload_world,
             commands::world_manager::upload_dimension,
             commands::world_manager::archive_world,
+            commands::world_manager::import_world,
             commands::network_manager::upnp_map_port,
             commands::network_manager::upnp_remove_port,
             commands::network_manager::install_playit,
@@ -94,6 +98,21 @@ pub fn run() {
             commands::backup::restore_backup,
             commands::backup::save_scheduled_tasks,
             commands::backup::load_scheduled_tasks
-        ]).run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let handle = app.clone();
+                let state = handle.state::<commands::runner::ServerProcessState>();
+                let processes_arc = state.processes.clone();
+                
+                if let Ok(mut processes) = processes_arc.lock() {
+                    for (id, mut child) in processes.drain() {
+                        let _ = child.kill();
+                        println!("Killed server process for server: {}", id);
+                    }
+                };
+            }
+        });
 }

@@ -256,7 +256,7 @@ export const useAppStore = create<AppState>()(
                 minimizeToTray: true,
                 checkUpdates: true,
                 confirmBeforeStop: true,
-                autoStopOnExit: false,
+                autoStopOnExit: true,
                 defaultServerPath: 'C:\\Mineserver\\Servers',
                 autoDetectJava: true,
                 defaultRam: 4,

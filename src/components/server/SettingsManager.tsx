@@ -4,7 +4,7 @@ import { useAppStore, Server } from '../../stores/appStore';
 import {
     Trash2, Edit2, FolderOpen, MemoryStick, Cpu, Save,
     RefreshCw, Download, Shield, Palette, Settings,
-    ChevronRight, Database, Power, Globe, Copy, Check
+    ChevronRight, Database, Power, Globe, Copy, Check, Image as ImageIcon, Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
@@ -230,6 +230,74 @@ export function SettingsManager({ server }: SettingsManagerProps) {
                                     "absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all",
                                     server.hideIp ? "left-8" : "left-1"
                                 )} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* SERVER BRANDING (Minecraft Icon) */}
+                <div className="bg-surface/50 border border-border/50 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border/50 flex items-center gap-3">
+                        <ImageIcon className="w-5 h-5 text-pink-400" />
+                        <h3 className="font-bold text-white">Server Branding</h3>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        <div className="flex items-start gap-4 p-4 bg-black/20 rounded-xl border border-border/50">
+                            <div className="w-16 h-16 bg-[#0d1117] rounded-none border border-border flex items-center justify-center relative group overflow-hidden">
+                                {/* We would ideally load the actual file here, but for now safe placeholder or try cache-busting url */}
+                                <img
+                                    src="https://api.mineskin.org/render/head?url=http://textures.minecraft.net/texture/292009a4925b58f02c77d69bf69792a105ce624692e4065292437367ce7a5"
+                                    className="w-full h-full object-cover opacity-50"
+                                    alt="Server Icon"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Upload className="w-6 h-6 text-white" />
+                                </div>
+                                <input
+                                    type="file"
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    accept="image/png"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+
+                                        if (file.type !== 'image/png') {
+                                            toast.error("Server icon must be a PNG image.");
+                                            return;
+                                        }
+
+                                        // Size check recommendation (can't strict enforce without reading dims, but warning is good)
+                                        if (file.size > 100 * 1024) {
+                                            toast.warning("Icon is large. Minecraft requires 64x64px. It might not show up.");
+                                        }
+
+                                        try {
+                                            toast.loading("Uploading icon...", { id: 'icon' });
+                                            const buf = await file.arrayBuffer();
+                                            await invoke('write_binary_file', {
+                                                path: `${server.path}\\server-icon.png`,
+                                                content: Array.from(new Uint8Array(buf))
+                                            });
+                                            toast.success("Server icon updated! Restart to see changes.", { id: 'icon' });
+                                        } catch (err) {
+                                            toast.error("Failed to upload: " + err, { id: 'icon' });
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-white">Server List Icon</h4>
+                                <p className="text-xs text-text-muted mt-1">
+                                    The image shown in the Minecraft multiplayer server list.
+                                </p>
+                                <ul className="text-[10px] text-text-muted mt-2 space-y-1 list-disc pl-3">
+                                    <li>Must be exactly <strong>64x64 pixels</strong></li>
+                                    <li>Must be a <strong>PNG</strong> format</li>
+                                    <li>Named <code>server-icon.png</code> (Auto-handled)</li>
+                                </ul>
+                            </div>
+                            <button className="px-3 py-1.5 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold transition-colors">
+                                Browse...
                             </button>
                         </div>
                     </div>

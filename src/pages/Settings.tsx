@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
 import {
     Settings as SettingsIcon,
+    AlertTriangle,
     Monitor,
     Globe,
     Palette,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 
@@ -209,6 +211,34 @@ export function Settings() {
                         <ToggleSetting label="Confirm Before Stopping" description="Show confirmation dialog before stopping servers" value={settings.confirmBeforeStop} onChange={(v) => handleChange('confirmBeforeStop', v)} />
                         <ToggleSetting label="Auto-Stop on Exit" description="Stop all running servers when closing the app" value={settings.autoStopOnExit} onChange={(v) => handleChange('autoStopOnExit', v)} />
                         <InputSetting label="Default Server Location" description="Where new servers are created by default" value={settings.defaultServerPath} onChange={(v) => handleChange('defaultServerPath', v)} placeholder="C:\Mineserver\Servers" />
+
+                        <div className="pt-4 border-t border-red-500/20 mt-4">
+                            <h4 className="font-bold text-red-500 mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Danger Zone</h4>
+                            <div className="flex items-center justify-between p-4 rounded-xl bg-red-500/5 border border-red-500/10 hover:border-red-500/30 transition-colors">
+                                <div>
+                                    <h4 className="font-medium text-red-200">Factory Reset / Uninstall</h4>
+                                    <p className="text-xs text-red-400/60 mt-0.5">Delete all servers, settings, and data.</p>
+                                </div>
+                                <button onClick={async () => {
+                                    if (confirm("Are you sure you want to factory reset? This will delete ALL servers and backups.")) {
+                                        const toastId = toast.loading("Resetting factory settings...");
+                                        try {
+                                            const paths = [settings.defaultServerPath, settings.backupPath];
+                                            await invoke('factory_reset', { paths });
+                                            localStorage.clear();
+                                            toast.success("Reset complete. Restarting...", { id: toastId });
+                                            setTimeout(() => {
+                                                window.location.reload();
+                                            }, 1500);
+                                        } catch (e) {
+                                            toast.error("Reset failed: " + e, { id: toastId });
+                                        }
+                                    }
+                                }} className="px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white font-bold rounded-lg border border-red-500/20 hover:border-red-500 transition-colors text-sm">
+                                    Factory Reset
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 

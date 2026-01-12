@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Terminal, Trash2, ArrowDown, X, Search, Eye, EyeOff, Download, Power, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -27,6 +27,14 @@ export function ServerConsole({ logs, setLogs, isRunning, onSendCommand, hideIp,
     }, [autoScroll]);
     const [commandInput, setCommandInput] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
+
+    // Memoize filtered logs to prevent unnecessary effects
+    const filteredLogs = useMemo(() => {
+        return searchTerm
+            ? logs.filter(l => l.toLowerCase().includes(searchTerm.toLowerCase()))
+            : logs;
+    }, [logs, searchTerm]);
+
     const [showSearch, setShowSearch] = useState(false);
     const consoleRef = useRef<HTMLDivElement>(null);
     const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -35,24 +43,35 @@ export function ServerConsole({ logs, setLogs, isRunning, onSendCommand, hideIp,
     const [history, setHistory] = useState<string[]>([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
 
-    // Scroll Logic - Smart Auto-Scroll
     useEffect(() => {
-        if (autoScroll && consoleEndRef.current) {
-            // Use 'auto' (instant) instead of 'smooth' to prevent lag with fast logs
-            consoleEndRef.current.scrollIntoView({ behavior: 'auto' });
+        if (autoScroll) {
+            // Instant scroll to bottom when logs change
+            // Using timeout to ensure DOM update is complete
+            const timeoutId = setTimeout(() => {
+                if (consoleEndRef.current) {
+                    consoleEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+                }
+            }, 10);
+            return () => clearTimeout(timeoutId);
         }
-    }, [logs, autoScroll]);
+    }, [filteredLogs, autoScroll]);
 
     // Handle manual scroll - disable auto-scroll if user scrolls up
     const handleScroll = () => {
         if (!consoleRef.current) return;
+
         const { scrollTop, scrollHeight, clientHeight } = consoleRef.current;
-        // Increased threshold to 80px for easier stickiness
-        const isAtBottom = scrollHeight - scrollTop - clientHeight < 80;
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+        // Tolerant "at bottom" check (50px buffer)
+        const isAtBottom = distanceFromBottom < 50;
 
         if (!autoScroll && isAtBottom) {
+            // Re-enable if user scrolls back to bottom manually
             setAutoScroll(true);
-        } else if (autoScroll && !isAtBottom) {
+        } else if (autoScroll && distanceFromBottom > 150) {
+            // Only disable if user explicitly scrolls up significantly (>150px)
+            // This prevents jitter from disabling it
             setAutoScroll(false);
         }
     };
@@ -120,9 +139,7 @@ export function ServerConsole({ logs, setLogs, isRunning, onSendCommand, hideIp,
         }
     };
 
-    const filteredLogs = searchTerm
-        ? logs.filter(l => l.toLowerCase().includes(searchTerm.toLowerCase()))
-        : logs;
+
 
     return (
         <div className="flex flex-col h-full bg-[#0d1117] rounded-xl overflow-hidden border border-border/50 shadow-2xl relative">
@@ -269,7 +286,7 @@ export function ServerConsole({ logs, setLogs, isRunning, onSendCommand, hideIp,
                 {/* Scroll to bottom button if user scrolled up */}
                 {!autoScroll && (
                     <button
-                        onClick={() => { setAutoScroll(true); consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+                        onClick={() => { setAutoScroll(true); if (consoleRef.current) consoleRef.current.scrollTo({ top: consoleRef.current.scrollHeight, behavior: 'smooth' }); }}
                         className="absolute bottom-4 right-4 bg-primary text-black rounded-full p-2 shadow-lg shadow-black/50 hover:bg-primary-hover transition-all animate-in fade-in zoom-in-95 duration-200"
                         title="Scroll to Bottom & Enable Auto-Scroll"
                     >

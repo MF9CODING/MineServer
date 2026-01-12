@@ -633,3 +633,152 @@ pub fn archive_world<R: tauri::Runtime>(
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn import_world<R: tauri::Runtime>(
+    window: tauri::Window<R>,
+    server_path: String,
+    zip_path: String,
+    new_level_name: String,
+) -> Result<(), String> {
+    use std::io::{Read, Write};
+    use tauri::Emitter;
+
+    let path = Path::new(&server_path);
+    
+    // Safety check: Don't allow empty name or path traversal
+    if new_level_name.trim().is_empty() || new_level_name.contains("..") || new_level_name.contains("/") || new_level_name.contains("\\") {
+        return Err("Invalid world name".to_string());
+    }
+
+    // Determine target path. For Bedrock -> "worlds/new_name". For Java -> "new_name".
+    // We try to detect server type or just defaults.
+    // To be safe and support both cleanly:
+    // If "worlds" folder exists, put it there (Bedrock).
+    // Else put it in root (Java).
+    
+    let worlds_folder = path.join("worlds");
+    let target_world_path = if worlds_folder.exists() && worlds_folder.is_dir() {
+        worlds_folder.join(&new_level_name)
+    } else {
+        path.join(&new_level_name)
+    };
+
+    if target_world_path.exists() {
+        return Err(format!("A world named '{}' already exists.", new_level_name));
+    }
+
+    let _ = window.emit("world_upload_progress", ProgressPayload {
+        percentage: 0,
+        details: format!("Importing into '{}'...", new_level_name),
+    });
+
+    // Create target directory
+    fs::create_dir_all(&target_world_path).map_err(|e| e.to_string())?;
+
+    // Open Zip
+    let file = File::open(&zip_path).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+
+    // Consolidated extraction logic (similar to upload_dimension but targeting a specific new folder)
+    let mut root_prefix: Option<String> = None;
+    let mut all_have_common_root = true;
+
+    // Check for common root folder in zip
+    for i in 0..archive.len() {
+        if let Ok(file) = archive.by_index(i) {
+            let name = file.name();
+            if let Some(first_slash) = name.find('/') {
+                let prefix = &name[..first_slash + 1];
+                if let Some(ref existing) = root_prefix {
+                    if existing != prefix {
+                        all_have_common_root = false;
+                        break;
+                    }
+                } else {
+                    root_prefix = Some(prefix.to_string());
+                }
+            } else {
+                all_have_common_root = false;
+                break;
+            }
+        }
+    }
+    
+    let strip_prefix = if all_have_common_root { root_prefix } else { None };
+
+    // Calculate total size
+    let mut total_size: u64 = 0;
+    for i in 0..archive.len() {
+        if let Ok(file) = archive.by_index(i) {
+            total_size += file.size();
+        }
+    }
+
+    let mut extracted_bytes: u64 = 0;
+    let mut last_emit_time = std::time::Instant::now();
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let file_name = file.name().to_string();
+
+        // Strip prefix
+        let relative_path = if let Some(ref prefix) = strip_prefix {
+            if file_name.starts_with(prefix) {
+                file_name.strip_prefix(prefix).unwrap_or(&file_name)
+            } else {
+                &file_name
+            }
+        } else {
+            &file_name
+        };
+
+        if relative_path.is_empty() { continue; }
+
+        let outpath = target_world_path.join(relative_path);
+
+        if file_name.ends_with('/') {
+            fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                     fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                }
+            }
+            let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
+            let mut buffer = [0u8; 8192];
+            loop {
+                let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
+                if n == 0 { break; }
+                outfile.write_all(&buffer[..n]).map_err(|e| e.to_string())?;
+                extracted_bytes += n as u64;
+
+                if last_emit_time.elapsed().as_millis() > 100 {
+                    let percentage = if total_size > 0 {
+                        ((extracted_bytes as f64 / total_size as f64) * 100.0) as u8
+                    } else { 0 };
+                    let _ = window.emit("world_upload_progress", ProgressPayload {
+                        percentage,
+                        details: format!("Extracting: {}", relative_path),
+                    });
+                    last_emit_time = std::time::Instant::now();
+                }
+            }
+        }
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+             if let Some(mode) = file.unix_mode() {
+                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode)).ok();
+            }
+        }
+    }
+
+    let _ = window.emit("world_upload_progress", ProgressPayload {
+        percentage: 100,
+        details: "Import complete!".to_string(),
+    });
+
+    Ok(())
+}

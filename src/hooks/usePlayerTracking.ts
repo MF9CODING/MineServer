@@ -48,9 +48,6 @@ export function usePlayerTracking(server: any) {
             let cleaned = name.replace(/\u001b\[[0-9;]*m/g, '');
             // Remove trailing dots/punctuation
             cleaned = cleaned.replace(/[.]+$/, '');
-            // Remove rank prefixes sometimes found in chat plugins (e.g. [Admin] Name) - heuristic
-            // But be careful not to remove part of valid names.
-            // For now, simple trim.
             return cleaned.trim();
         };
 
@@ -59,22 +56,22 @@ export function usePlayerTracking(server: any) {
         const bedrockLeave = log.match(/Player disconnected: (.+), xuid:/);
 
         // --- Java Patterns ---
-        // Standard: ": <name> joined the game"
         // Regex notes:
-        // (?:\[.*?\] )? matches options timestamp/thread prefix
-        // (: ) matches the separator
-        const javaJoin = log.match(/: (.+) joined the game/);
-        const javaLeave = log.match(/: (.+) left the game/);
+        // Match standard vanilla/spigot/paper join messages
+        // Try to avoid matching chat messages (e.g. "<Player> joined the game" typed in chat)
+        // Usually system messages don't have < > brackets at the start.
+        const javaJoin = log.match(/(?<!<[^>]+>)(?:^|:\s)([\w_]+) joined the game/);
+        const javaLeave = log.match(/(?<!<[^>]+>)(?:^|:\s)([\w_]+) left the game/);
 
         // --- Sync Patterns (/list) ---
-        // "There are 2 of a max of 20 players online: Name1, Name2"
-        const listMatch = log.match(/players online: (.+)/);
+        // Format 1: "There are 2 of a max of 20 players online: Name1, Name2"
+        // Format 2: "Online players (2/20): Name1, Name2" (Essentials/Other plugins)
+        const listMatch = log.match(/(?:players online|Online players).*?: (.*)/i);
 
-        // --- UUID Auth Pattern (Add but don't toast) ---
+        // --- UUID Auth Pattern ---
         const uuidMatch = log.match(/UUID of player (.+) is/);
 
         // --- Generic Fallbacks ---
-        // Some servers just say "<name> joined."
         const simpleJoin = !javaJoin && !bedrockJoin && log.match(/: (.+) joined\./);
         const simpleLeave = !javaLeave && !bedrockLeave && log.match(/: (.+) left\./);
 
@@ -83,6 +80,7 @@ export function usePlayerTracking(server: any) {
         } else if (bedrockLeave) {
             removePlayer(cleanName(bedrockLeave[1]), true);
         } else if (javaJoin) {
+            // Ensure we didn't match a chat message
             addPlayer(cleanName(javaJoin[1]), true);
         } else if (javaLeave) {
             removePlayer(cleanName(javaLeave[1]), true);
@@ -91,15 +89,17 @@ export function usePlayerTracking(server: any) {
         } else if (simpleLeave) {
             removePlayer(cleanName(simpleLeave[1]), true);
         } else if (uuidMatch) {
-            // We don't toast for UUID check as it happens before join and frequent
             addPlayer(cleanName(uuidMatch[1]), false);
         } else if (listMatch) {
             // Parse list: "Name1, Name2, Name3"
             const rawList = listMatch[1];
-            // Split by comma+space
-            const names = rawList.split(', ').map(n => cleanName(n)).filter(n => n.length > 0);
-
-            setPlayers(names);
+            if (!rawList || rawList.trim().length === 0) {
+                setPlayers([]);
+            } else {
+                // Split by comma+space
+                const names = rawList.split(/,\s*/).map(n => cleanName(n)).filter(n => n.length > 0);
+                setPlayers(names);
+            }
         }
     };
 

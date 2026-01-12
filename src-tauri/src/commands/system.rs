@@ -72,3 +72,14 @@ pub struct SystemInfo {
     disk_total_gb: u64,
     disk_free_gb: u64,
 }
+
+#[tauri::command]
+pub fn factory_reset(paths: Vec<String>) -> Result<(), String> {
+    for path_str in paths {
+        let path = std::path::Path::new(&path_str);
+        if path.exists() {
+             std::fs::remove_dir_all(path).map_err(|e| format!("Failed to delete {}: {}", path_str, e))?;
+        }
+    }
+    Ok(())
+}

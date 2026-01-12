@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import {
-    Terminal, Play, Square, RefreshCw, Cpu,
+    Terminal, Play, Square, RefreshCw, Cpu, Copy,
     ChevronLeft, Check, Trash2, Sliders,
     MonitorPlay, Users, Clock, Files, Zap, MemoryStick, AlertTriangle, Box, Globe, Wifi, Settings as SettingsIcon, Puzzle, Gamepad2,
     Shield, Eye, EyeOff
@@ -36,14 +36,33 @@ export function ServerDetail() {
     const navigate = useNavigate();
     const { servers, setServerStatus, fetchSystemInfo, deleteServer, updateServer, streamerMode } = useAppStore();
     const server = servers.find(s => s.id === id);
+
+    // Redirect if server not found (e.g. deleted)
+    useEffect(() => {
+        if (!server && id) {
+            navigate('/servers');
+        }
+    }, [server, id, navigate]);
+
+
+
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [activeTab, setActiveTab] = useState<'console' | 'options' | 'files' | 'players' | 'software' | 'world' | 'network' | 'startup' | 'settings' | 'plugins' | 'mods' | 'gamerules' | 'security'>('console');
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [logs, setLogs] = useState<string[]>([]);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [commandInput, setCommandInput] = useState("");
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [copiedIp, setCopiedIp] = useState(false);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [uptime, setUptime] = useState<string>("00:00:00");
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [lanIp, setLanIp] = useState<string>("");
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [isRestarting, setIsRestarting] = useState(false);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [revealIp, setRevealIp] = useState(false);
+    const [motd, setMotd] = useState<string>("");
 
     // Custom Hook for Player Tracking
     const players = usePlayerTracking(server);
@@ -57,7 +76,19 @@ export function ServerDetail() {
 
     useEffect(() => {
         invoke<string>('get_local_ip').then(setLanIp).catch(console.error);
-    }, []);
+
+        // Fetch MOTD
+        if (server) {
+            invoke<Record<string, string>>('get_server_properties', {
+                id: server.id,
+                serverPath: server.path,
+                serverType: server.type
+            }).then(props => {
+                if (props['motd']) setMotd(props['motd']);
+                else if (props['server-name']) setMotd(props['server-name']); // Bedrock fallback
+            }).catch(e => console.error("Failed to fetch MOTD:", e));
+        }
+    }, [server]);
 
     // Start Time Tracking
     useEffect(() => {
@@ -239,8 +270,26 @@ export function ServerDetail() {
         }
     };
 
-    const handleStop = async () => {
+    // Clear logs when switching servers
+    useEffect(() => {
+        setLogs([]);
+    }, [id]);
+
+    const handleStop = async (e?: React.MouseEvent) => {
         if (!isRunning) return;
+
+        // Force Kill check (Shift + Click)
+        if (e && e.shiftKey) {
+            if (!confirm("Force Kill? This may corrupt chunks.")) return;
+            try {
+                await invoke('kill_server', { id: server.id });
+                setServerStatus(server.id, 'stopped');
+                toast.success("Server killed forcibly.");
+            } catch (err) {
+                toast.error("Failed to kill: " + err);
+            }
+            return;
+        }
 
         toast.info(`Stopping ${server.name}...`);
         setLogs(prev => [...prev, `[Mineserver] Stopping server...`]);
@@ -371,18 +420,20 @@ export function ServerDetail() {
                                             <Globe className="w-3.5 h-3.5 text-text-muted" />
                                             <span className="font-mono">{revealIp ? (server.displayIp || (lanIp ? `${lanIp}:${server.port}` : `localhost:${server.port}`)) : "***.***.***.***"}</span>
                                         </div>
-                                        <button onClick={() => updateServer(server.id, { hideIp: false })} className="p-1 hover:text-white text-text-muted transition-colors" title="Show IP permanently">
+                                        <button onClick={() => updateServer(server.id, { hideIp: false })} className="p-1 hover:text-white text-text-muted transition-colors opacity-0 group-hover:opacity-100" title="Show IP permanently">
                                             <EyeOff className="w-3.5 h-3.5" />
                                         </button>
                                     </>
                                 ) : (
                                     <>
-                                        <button onClick={handleCopyIp} className="flex items-center gap-1.5 px-1 hover:text-primary transition-colors" title="Click to Copy">
+                                        <div className="flex items-center gap-1.5 px-1 select-all cursor-text">
                                             <Globe className="w-3.5 h-3.5 text-text-muted" />
                                             <span className="font-mono">{server.displayIp || (lanIp ? `${lanIp}:${server.port}` : `localhost:${server.port}`)}</span>
-                                            {copiedIp && <Check className="w-3.5 h-3.5 text-green-500" />}
+                                        </div>
+                                        <button onClick={handleCopyIp} className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-primary transition-all" title="Copy IP">
+                                            {copiedIp ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                                         </button>
-                                        <button onClick={() => updateServer(server.id, { hideIp: true })} className="p-1 hover:text-white text-text-muted transition-colors" title="Hide IP">
+                                        <button onClick={() => updateServer(server.id, { hideIp: true })} className="p-1 hover:text-white text-text-muted transition-colors opacity-0 group-hover:opacity-100" title="Hide IP">
                                             <Eye className="w-3.5 h-3.5" />
                                         </button>
                                     </>
@@ -390,7 +441,20 @@ export function ServerDetail() {
                             </div>
                             <span className="text-border">•</span>
                             <span className="capitalize">{server.type} {server.version}</span>
+                            <span className="text-border">•</span>
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/5 border border-white/5">
+                                <Users className="w-3.5 h-3.5 text-blue-400" />
+                                <span className="font-mono text-blue-200">
+                                    {players.length} <span className="text-text-muted">/</span> {server.maxPlayers}
+                                </span>
+                            </div>
                         </div>
+                        {motd && (
+                            <div className="mt-2 text-sm text-text-muted italic flex items-center gap-2 overflow-hidden max-w-lg truncate">
+                                <span className="w-1 h-1 rounded-full bg-primary/50 shrink-0" />
+                                <span dangerouslySetInnerHTML={{ __html: motd.replace(/§[0-9a-fk-or]/g, '') }} />
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -400,7 +464,7 @@ export function ServerDetail() {
                             <button onClick={handleRestart} disabled={isRestarting} className="h-10 px-4 rounded-xl bg-yellow-500/10 hover:bg-yellow-500 text-yellow-500 hover:text-black border border-yellow-500/20 font-medium flex items-center gap-2 transition-all">
                                 <RefreshCw className={cn("w-4 h-4", isRestarting && "animate-spin")} /> Restart
                             </button>
-                            <button onClick={handleStop} className="h-10 px-4 rounded-xl bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20 font-bold flex items-center gap-2 transition-all">
+                            <button onClick={handleStop} title="Shift+Click to Force Kill" className="h-10 px-4 rounded-xl bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20 font-bold flex items-center gap-2 transition-all">
                                 <Square className="w-4 h-4 fill-current" /> Stop
                             </button>
                         </>
@@ -441,8 +505,8 @@ export function ServerDetail() {
                 {server.type !== 'bedrock' && (
                     <StatsCard
                         label="TPS"
-                        value={isRunning ? "~20.0" : "--"}
-                        sub={isRunning ? "Server Performance" : "Offline"}
+                        value={isRunning ? "20.0 / 20.0" : "0.0 / 20.0"}
+                        sub="Ticks Per Second"
                         icon={Zap}
                         color="emerald"
                         percent={isRunning ? 100 : 0}
@@ -528,7 +592,7 @@ export function ServerDetail() {
                         </div>
                     )}
                     {activeTab === 'files' && <FileManager serverPath={server.path} />}
-                    {activeTab === 'players' && <PlayerManager sendCommand={sendCommand} isRunning={isRunning} activePlayers={players || []} serverType={server.type} serverName={server.name} serverPath={server.path} />}
+                    {activeTab === 'players' && <ErrorBoundary><PlayerManager sendCommand={sendCommand} isRunning={isRunning} activePlayers={players || []} serverType={server.type} serverName={server.name} serverPath={server.path} /></ErrorBoundary>}
                     {activeTab === 'software' && <SoftwareManager server={server} />}
                     {activeTab === 'world' && <WorldManager server={server} />}
                     {activeTab === 'network' && <NetworkManager server={server} />}
