@@ -556,7 +556,7 @@ export function ServerDetail() {
                     {(server.type === 'paper' || server.type === 'spigot' || server.type === 'purpur' || server.type === 'nukkit') && (
                         <TabButton active={activeTab === 'plugins'} onClick={() => setActiveTab('plugins')} icon={Puzzle} label="Plugins" desc="Browse & Install" />
                     )}
-                    {(server.type === 'forge' || server.type === 'fabric') && (
+                    {(server.type === 'forge' || server.type === 'neoforge' || server.type === 'fabric') && (
                         <TabButton active={activeTab === 'mods'} onClick={() => setActiveTab('mods')} icon={Package} label="Mods" desc="Browse & Install" />
                     )}
 
