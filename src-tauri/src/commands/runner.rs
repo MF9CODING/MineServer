@@ -1,106 +1,100 @@
-use tauri::{State, Window, Emitter};
+use tauri::{State, WebviewWindow, Emitter};
 use std::process::{Command, Stdio, Child};
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, BufRead, Write};
 use std::thread;
+use std::time::Duration;
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct ServerConfig {
+    pub id: String,
+    pub path: String,
+    pub jar_file: String,
+    pub ram: u32,
+    pub java_path: Option<String>,
+    pub startup_flags: Option<String>,
+    pub auto_restart: bool,
+}
 
 pub struct ServerProcessState {
     pub processes: Arc<Mutex<HashMap<String, Child>>>,
+    pub explicit_stops: Arc<Mutex<HashSet<String>>>,
+    pub configs: Arc<Mutex<HashMap<String, ServerConfig>>>,
 }
 
 impl ServerProcessState {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(Mutex::new(HashMap::new())),
+            explicit_stops: Arc::new(Mutex::new(HashSet::new())),
+            configs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
 
-#[tauri::command]
-pub fn start_server(
-    window: Window,
-    app_handle: tauri::AppHandle,
-    state: State<'_, ServerProcessState>,
-    id: String,
-    path: String,
-    jar_file: String,
-    ram: u32,
-    java_path: Option<String>,
-    startup_flags: Option<String>,
-) -> Result<String, String> {
-    let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
-
-    if processes.contains_key(&id) {
-        return Err("Server is already running".to_string());
-    }
-
-    let server_path = std::path::Path::new(&path);
-    // Verify Server Path
+// Internal helper to spawn process
+fn spawn_process_internal(
+    window: WebviewWindow,
+    config: &ServerConfig
+) -> Result<Child, String> {
+    let server_path = std::path::Path::new(&config.path);
     if !server_path.exists() {
-        let _ = window.emit("debug-log", format!("CRITICAL: Server path does not exist: {:?}", server_path));
         return Err("Server directory not found".to_string());
-    } else {
-        let _ = window.emit("debug-log", format!("Server path exists: {:?}", server_path));
     }
 
-    // Construct args
+    // Auto-Accept EULA
+    let eula_path = server_path.join("eula.txt");
+    // Check if it exists or if it explicitly says false
+    // We just force write eula=true to be robust
+    if let Ok(content) = std::fs::read_to_string(&eula_path) {
+        if !content.contains("eula=true") {
+             let _ = std::fs::write(&eula_path, "eula=true");
+        }
+    } else {
+         let _ = std::fs::write(&eula_path, "eula=true");
+    }
+
     let mut cmd;
     
-    if jar_file.ends_with(".jar") || jar_file.ends_with(".phar") {
-        let bin = if jar_file.ends_with(".phar") { "php" } else { "java" };
-        let java_bin = java_path.unwrap_or_else(|| bin.to_string());
+    if config.jar_file.ends_with(".jar") || config.jar_file.ends_with(".phar") {
+        let bin = if config.jar_file.ends_with(".phar") { "php" } else { "java" };
+        let java_bin = config.java_path.clone().unwrap_or_else(|| bin.to_string());
         
         let mut final_bin = java_bin.clone();
 
-        // ---------------------------------------------------------
-        // LOGIC SPLIT: ANDROID vs DESKTOP
-        // ---------------------------------------------------------
-        
-        // Desktop Logic
+        // Desktop Logic for PHP
         let local_php = server_path.join("bin/php");
-        // Check for bundled PHP (e.g. if user manually put it there or we support it later)
-        if jar_file.ends_with(".phar") && local_php.exists() {
+        if config.jar_file.ends_with(".phar") && local_php.exists() {
              final_bin = local_php.to_string_lossy().to_string();
         }
 
-        // ---------------------------------------------------------
-
-        // Ensure Android binary AND libraries are executable (Recursive Fix)
-
-        
         let _ = window.emit("debug-log", format!("Launching: {} CWD: {:?}", final_bin, server_path));
         
         cmd = Command::new(&final_bin);
-        // Set env vars for libraries if needed
-
-        
-        // Important: PocketMine MUST run in the server directory
         cmd.current_dir(server_path); 
 
         // Add RAM args first only for Java
-        if !jar_file.ends_with(".phar") {
-            cmd.arg(format!("-Xmx{}M", ram));
-            cmd.arg(format!("-Xms{}M", ram));
+        if !config.jar_file.ends_with(".phar") {
+            cmd.arg(format!("-Xmx{}M", config.ram));
+            cmd.arg(format!("-Xms{}M", config.ram));
         }
         
         // Add Custom Flags
-        if let Some(flags) = startup_flags {
+        if let Some(flags) = &config.startup_flags {
             for flag in flags.split_whitespace() {
                  cmd.arg(flag);
             }
         }
         
-        if jar_file.ends_with(".phar") {
-             cmd.arg(&jar_file);
+        if config.jar_file.ends_with(".phar") {
+             cmd.arg(&config.jar_file);
         } else {
-             cmd.arg("-jar").arg(&jar_file).arg("nogui");
+             cmd.arg("-jar").arg(&config.jar_file).arg("nogui");
         }
     } else {
-        // Binary execution (exe or linux binary)
-
-
-        cmd = Command::new(server_path.join(&jar_file));
+        // Binary execution
+        cmd = Command::new(server_path.join(&config.jar_file));
         cmd.current_dir(server_path);
     }
 
@@ -117,48 +111,259 @@ pub fn start_server(
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to start server: {}", e))?;
     
-    // Spawn threads to read stdout/stderr and emit events
+    // Wire up logs
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
     
     let window_clone = window.clone();
-    let id_clone = id.clone();
+    let id_clone = config.id.clone();
     let log_path = server_path.join("server_console.log");
-    let log_path_err = log_path.clone();
-
-    // Clone log path for threads. We use simple append.
-    // Ideally we would use a Mutex<File> but independent opens in append mode usually work on OS level for logs (interleaved).
     
+    // Stdout Thread
+    let lp = log_path.clone();
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             if let Ok(l) = line {
                 let _ = window_clone.emit(&format!("server-log:{}", id_clone), &l);
-                // Persistence
-                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&lp) {
                     let _ = writeln!(file, "{}", l);
                 }
             }
         }
     });
 
+    // Stderr Thread
     let window_clone_err = window.clone();
-    let id_clone_err = id.clone();
+    let id_clone_err = config.id.clone();
+    let lp_err = log_path.clone();
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             if let Ok(l) = line {
                  let _ = window_clone_err.emit(&format!("server-log:{}", id_clone_err), &l);
-                 // Persistence
-                 if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path_err) {
+                 if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&lp_err) {
                     let _ = writeln!(file, "{}", l);
                 }
             }
         }
     });
 
-    processes.insert(id, child);
+    Ok(child)
+}
+
+pub fn start_server_direct(
+    window: WebviewWindow,
+    state: &ServerProcessState,
+    id: String,
+    path: String,
+    jar_file: String,
+    ram: u32,
+    java_path: Option<String>,
+    startup_flags: Option<String>,
+    auto_restart: Option<bool>,
+) -> Result<String, String> {
+    let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
+
+    if processes.contains_key(&id) {
+        return Err("Server is already running".to_string());
+    }
+
+    // Reset explicit stop flag
+    if let Ok(mut express_stops) = state.explicit_stops.lock() {
+        express_stops.remove(&id);
+    }
+
+    let config = ServerConfig {
+        id: id.clone(),
+        path,
+        jar_file,
+        ram,
+        java_path,
+        startup_flags,
+        auto_restart: auto_restart.unwrap_or(false),
+    };
+
+    // Store config for restarts
+    if let Ok(mut configs) = state.configs.lock() {
+        configs.insert(id.clone(), config.clone());
+    }
+
+    // Spawn Process
+    let child = spawn_process_internal(window.clone(), &config)?;
+    
+    // Store process
+    processes.insert(id.clone(), child);
+    
+    // Spawn Monitor Thread
+    let processes_arc = state.processes.clone();
+    let explicit_stops_arc = state.explicit_stops.clone();
+    let configs_arc = state.configs.clone();
+    let window_monitor = window.clone();
+    let monitor_id = id.clone();
+
+    thread::spawn(move || {
+        monitor_server_loop(monitor_id, window_monitor, processes_arc, explicit_stops_arc, configs_arc);
+    });
+
     Ok("Server started".into())
+}
+
+#[tauri::command]
+pub fn start_server(
+    window: WebviewWindow,
+    state: State<'_, ServerProcessState>,
+    id: String,
+    path: String,
+    jar_file: String,
+    ram: u32,
+    java_path: Option<String>,
+    startup_flags: Option<String>,
+    auto_restart: Option<bool>,
+) -> Result<String, String> {
+    start_server_direct(window, state.inner(), id, path, jar_file, ram, java_path, startup_flags, auto_restart)
+}
+
+// Logic to monitor and restart
+fn monitor_server_loop(
+    id: String,
+    window: WebviewWindow,
+    processes: Arc<Mutex<HashMap<String, Child>>>,
+    explicit_stops: Arc<Mutex<HashSet<String>>>,
+    configs: Arc<Mutex<HashMap<String, ServerConfig>>>
+) {
+    loop {
+        // Polling loop
+        thread::sleep(Duration::from_secs(2));
+
+        let mut is_running = false;
+        
+        // Check Status
+        {
+            if let Ok(mut procs) = processes.lock() {
+                if let Some(child) = procs.get_mut(&id) {
+                    match child.try_wait() {
+                        Ok(Some(_)) => {
+                            is_running = false; // Exited
+                        },
+                        Ok(None) => {
+                            is_running = true; // Still running
+                        },
+                        Err(_) => {
+                            is_running = false;
+                        }
+                    }
+                } else {
+                    // Removed from map -> likely stopped or crashed and cleaned up already
+                    return; 
+                }
+            }
+        }
+
+        if is_running {
+            continue;
+        }
+
+        // Process has exited.
+        // Remove from map first
+        {
+            if let Ok(mut procs) = processes.lock() {
+                procs.remove(&id);
+            }
+        }
+
+        let _ = window.emit("server-stopped", &id);
+
+        // Check if explicit stop
+        let was_explicit_stop = {
+            if let Ok(stops) = explicit_stops.lock() {
+                stops.contains(&id)
+            } else {
+                false
+            }
+        };
+
+        if was_explicit_stop {
+            let _ = window.emit(&format!("server-log:{}", id), format!("Server {} stopped (User Initiated).", id));
+            break; // Exit monitor
+        }
+
+        // Check Auto Restart
+        let config = {
+            let confs = configs.lock().unwrap();
+            confs.get(&id).cloned()
+        };
+
+        if let Some(cfg) = config {
+            if cfg.auto_restart {
+                let _ = window.emit(&format!("server-log:{}", id), format!("Server {} crashed/stopped. Auto-restarting in 3s...", id));
+                // Wait
+                thread::sleep(Duration::from_secs(3));
+                
+                // Restart
+                match spawn_process_internal(window.clone(), &cfg) {
+                    Ok(new_child) => {
+                        let _ = window.emit("server-started", &id); // Notify UI
+                        if let Ok(mut procs) = processes.lock() {
+                            procs.insert(id.clone(), new_child);
+                        }
+                        // Loop continues to monitor new process
+                    },
+                    Err(e) => {
+                        let _ = window.emit(&format!("server-log:{}", id), format!("Failed to auto-restart: {}", e));
+                        break;
+                    }
+                }
+            } else {
+                // No auto restart
+                 break;
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+pub fn stop_server_direct(
+    state: &ServerProcessState,
+    id: String
+) -> Result<String, String> {
+    // 1. Mark as explicit stop
+    {
+        let mut express = state.explicit_stops.lock().map_err(|e| e.to_string())?;
+        express.insert(id.clone());
+    }
+
+    let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
+
+    if let Some(mut child) = processes.remove(&id) {
+        // Try graceful stop
+        if let Some(mut stdin) = child.stdin.take() {
+             // For Java servers, "stop" is standard. For Bedrock, also "stop".
+            let _ = writeln!(stdin, "stop");
+        }
+
+        // Wait up to 10 seconds
+        let start = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => return Ok("Server stopped gracefully".into()),
+                Ok(None) => {
+                    if start.elapsed().as_secs() > 10 {
+                        let _ = child.kill();
+                        return Ok("Server stopped (Forced)".into());
+                    }
+                    thread::sleep(Duration::from_millis(500));
+                },
+                Err(_) => {
+                     let _ = child.kill();
+                     return Ok("Server stopped".into());
+                }
+            }
+        }
+    } else {
+        Err("Server not running".into())
+    }
 }
 
 #[tauri::command]
@@ -166,43 +371,11 @@ pub fn stop_server(
     state: State<'_, ServerProcessState>,
     id: String
 ) -> Result<String, String> {
-    let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
-
-    if let Some(mut child) = processes.remove(&id) {
-        // 1. Try graceful stop
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = writeln!(stdin, "stop");
-        }
-
-        // 2. Wait up to 15 seconds for graceful exit
-        let start = std::time::Instant::now();
-        let timeout = std::time::Duration::from_secs(15);
-        
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => return Ok("Server stopped gracefully".into()),
-                Ok(None) => {
-                    if start.elapsed() >= timeout {
-                        break; // Timeout, force kill
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
-                Err(_) => break, // Error checking, just kill
-            }
-        }
-        
-        // 3. Force Kill
-        let _ = child.kill(); 
-        
-        Ok("Server stopped (Forced)".into())
-    } else {
-        Err("Server not running".into())
-    }
+    stop_server_direct(state.inner(), id)
 }
 
-#[tauri::command]
-pub fn send_server_command(
-    state: State<'_, ServerProcessState>,
+pub fn send_server_command_direct(
+    state: &ServerProcessState,
     id: String,
     command: String
 ) -> Result<(), String> {
@@ -215,6 +388,15 @@ pub fn send_server_command(
         }
     }
     Err("Server not running or stdin unavailable".into())
+}
+
+#[tauri::command]
+pub fn send_server_command(
+    state: State<'_, ServerProcessState>,
+    id: String,
+    command: String
+) -> Result<(), String> {
+    send_server_command_direct(state.inner(), id, command)
 }
 
 #[tauri::command]
@@ -244,29 +426,22 @@ pub fn get_server_resource_usage(
     let processes = proc_state.processes.lock().map_err(|e| e.to_string())?;
     
     if let Some(child) = processes.get(&id) {
-        let pid = child.id(); // u32
+        let pid = child.id(); 
         
-        // Lock system
         let mut sys = sys_state.sys.lock().map_err(|e| e.to_string())?;
-        
-        // Refresh ALL processes to get accurate child process info
         use sysinfo::Pid;
         sys.refresh_processes();
-        
         let sys_pid = Pid::from_u32(pid);
         
-        // Sum up resources from the main process AND all its children
         let mut total_cpu: f32 = 0.0;
         let mut total_ram: u64 = 0;
         
-        // Get the main process
         if let Some(proc) = sys.process(sys_pid) {
             total_cpu += proc.cpu_usage();
             total_ram += proc.memory();
         }
         
-        // Also sum all child processes (Java may spawn multiple threads/processes)
-        for (proc_pid, proc) in sys.processes() {
+        for (_proc_pid, proc) in sys.processes() {
             if let Some(parent_pid) = proc.parent() {
                 if parent_pid == sys_pid {
                     total_cpu += proc.cpu_usage();
@@ -281,7 +456,6 @@ pub fn get_server_resource_usage(
         });
     }
     
-    // If not found or not running
     Ok(ResourceUsage { cpu: 0.0, ram: 0 })
 }
 
@@ -299,10 +473,7 @@ pub fn get_running_servers(
 #[tauri::command]
 pub fn clear_log_file(path: String) -> Result<(), String> {
     let log_path = std::path::Path::new(&path).join("server_console.log");
-    
-    // Create new empty file or truncate existing
     std::fs::File::create(&log_path)
         .map_err(|e| format!("Failed to clear log file: {}", e))?;
-        
     Ok(())
 }

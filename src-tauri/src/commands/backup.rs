@@ -25,6 +25,7 @@ pub struct ScheduledTask {
     pub task_type: String, // "restart", "backup", "command"
     pub server_id: String,
     pub server_name: String,
+    pub server_path: String,
     pub cron_expression: String,
     pub enabled: bool,
     pub last_run: Option<String>,
@@ -211,6 +212,10 @@ pub async fn save_scheduled_tasks(tasks: Vec<ScheduledTask>) -> Result<(), Strin
 
 #[tauri::command]
 pub async fn load_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
+    load_scheduled_tasks_sync()
+}
+
+pub fn load_scheduled_tasks_sync() -> Result<Vec<ScheduledTask>, String> {
     let tasks_file = get_tasks_file();
     if !tasks_file.exists() {
         return Ok(vec![]);

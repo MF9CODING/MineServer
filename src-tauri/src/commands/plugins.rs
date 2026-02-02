@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub struct InstalledPlugin {
     pub name: String,
     pub filename: String,
+    pub enabled: bool,
+    pub size: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,17 +63,19 @@ pub async fn list_plugins(server_path: String) -> Result<Vec<InstalledPlugin>, S
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext == "jar" {
-                    let filename = path.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string();
-                    
-                    let name = filename.trim_end_matches(".jar").to_string();
-                    
-                    plugins.push(InstalledPlugin { name, filename });
-                }
+            let filename = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+                
+            let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+
+            if filename.ends_with(".jar") {
+                let name = filename.trim_end_matches(".jar").to_string();
+                plugins.push(InstalledPlugin { name, filename, enabled: true, size });
+            } else if filename.ends_with(".jar.disabled") {
+                let name = filename.trim_end_matches(".jar.disabled").to_string();
+                plugins.push(InstalledPlugin { name, filename, enabled: false, size });
             }
         }
     }
@@ -91,7 +95,7 @@ pub async fn search_modrinth_plugins(query: String, offset: Option<u64>) -> Resu
     );
 
     let resp = client.get(&url)
-        .header("User-Agent", "Mineserver/1.0")
+        .header("User-Agent", "Mineserver/1.0.0 (contact@mineserver.app)")
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
@@ -117,7 +121,7 @@ pub async fn install_modrinth_plugin(project_id: String, server_path: String) ->
     );
 
     let resp = client.get(&versions_url)
-        .header("User-Agent", "Mineserver/1.0")
+        .header("User-Agent", "Mineserver/1.0.0 (contact@mineserver.app)")
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
@@ -136,7 +140,7 @@ pub async fn install_modrinth_plugin(project_id: String, server_path: String) ->
 
     // Download the jar
     let jar_bytes = client.get(&file.url)
-        .header("User-Agent", "Mineserver/1.0")
+        .header("User-Agent", "Mineserver/1.0.0 (contact@mineserver.app)")
         .send()
         .await
         .map_err(|e| format!("Download failed: {}", e))?
@@ -155,6 +159,29 @@ pub async fn install_modrinth_plugin(project_id: String, server_path: String) ->
         .map_err(|e| format!("Failed to write plugin: {}", e))?;
 
     Ok(file.filename.clone())
+}
+
+#[tauri::command]
+pub async fn toggle_plugin(server_path: String, filename: String) -> Result<String, String> {
+    let plugins_dir = Path::new(&server_path).join("plugins");
+    let old_path = plugins_dir.join(&filename);
+    
+    if !old_path.exists() {
+        return Err("File not found".to_string());
+    }
+
+    let new_filename = if filename.ends_with(".disabled") {
+        filename.trim_end_matches(".disabled").to_string()
+    } else {
+        format!("{}.disabled", filename)
+    };
+
+    let new_path = plugins_dir.join(&new_filename);
+    
+    fs::rename(&old_path, &new_path)
+        .map_err(|e| format!("Failed to toggle plugin: {}", e))?;
+
+    Ok(new_filename)
 }
 
 #[tauri::command]
@@ -593,6 +620,49 @@ pub async fn search_polymart_plugins(query: String, page: Option<u32>) -> Result
     }
 }
 
+#[tauri::command]
+pub async fn install_polymart_plugin(resource_id: String, server_path: String) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mineserver/1.0.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+        
+    let download_url = format!("https://polymart.org/resource/{}/download", resource_id);
+    let resp = client.get(&download_url).send().await.map_err(|e| e.to_string())?;
+    
+    if !resp.status().is_success() {
+        return Err(format!("Download failed: HTTP {}", resp.status()));
+    }
+    
+    // Try to infer filename from header
+    let filename = resp.headers()
+        .get(reqwest::header::CONTENT_DISPOSITION)
+        .and_then(|cd| cd.to_str().ok())
+        .and_then(|cd| {
+            if let Some(idx) = cd.find("filename=") {
+                Some(cd[idx+9..].trim_matches('"').to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| format!("polymart-{}.jar", resource_id));
+
+    let jar_bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    
+    // Check if HTML (login wall)
+    if jar_bytes.starts_with(b"<!DOCTYPE html") || jar_bytes.starts_with(b"<html") {
+         return Err("Failed to download: Plugin requires login or is paid.".to_string());
+    }
+
+    let plugins_dir = Path::new(&server_path).join("plugins");
+    fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
+    
+    let jar_path = plugins_dir.join(&filename);
+    fs::write(&jar_path, &jar_bytes).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
 // --- Plugin Version Fetching ---
 
 #[derive(Debug, Serialize)]
@@ -618,6 +688,17 @@ pub async fn get_plugin_versions(source: String, project_id: String, slug: Strin
         .map_err(|e| e.to_string())?;
     
     match source.as_str() {
+        "polymart" => {
+            Ok(vec![VersionInfo {
+                id: project_id.clone(),
+                name: "Latest".to_string(),
+                game_versions: vec!["Latest".to_string()],
+                loaders: vec!["spigot".to_string(), "paper".to_string()],
+                download_url: format!("https://polymart.org/resource/{}/download", project_id),
+                date_published: "".to_string(),
+                version_type: "Release".to_string(),
+            }])
+        },
         "modrinth" => {
             let url = format!("https://api.modrinth.com/v2/project/{}/version", project_id);
             let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;

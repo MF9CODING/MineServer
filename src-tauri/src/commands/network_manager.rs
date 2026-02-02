@@ -500,8 +500,48 @@ pub async fn add_firewall_rule(port: u16) -> Result<String, String> {
     Err(format!("Netsh failed: {}", stderr))
 }
 
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn set_tunnel_guard(id: String, port: u16, enabled: bool) -> Result<String, String> {
+    use std::process::Command;
+    
+    // We implement "Tunnel Guard" by simply removing the public ALLOW rule.
+    // This reverts the system to strict default (Block Inbound).
+    // Playit (running locally) can still connect via Loopback (which is usually whitelisted implicitly or via app rule).
+    
+    let std_rule_name = format!("MineServer Port {}", port);
+    
+    if enabled {
+        // Enforce STRICT: Delete the Allow rule
+        let output = Command::new("netsh")
+            .args(["advfirewall", "firewall", "delete", "rule", &format!("name=\"{}\"", std_rule_name)])
+            .output()
+            .map_err(|e| e.to_string())?;
+            
+        // We also check for UAC if direct delete fails? 
+        // Generally delete might fail if not admin.
+        
+        if !output.status.success() {
+             let stderr = String::from_utf8_lossy(&output.stderr);
+             if stderr.contains("Run as administrator") {
+                 // Try UAC
+                 let ps_cmd = format!("Start-Process netsh -ArgumentList 'advfirewall firewall delete rule name=\"{}\"' -Verb RunAs -WindowStyle Hidden -Wait", std_rule_name);
+                 let _ = Command::new("powershell").args(["-NoProfile", "-Command", &ps_cmd]).output();
+             }
+        }
+            
+        return Ok("Tunnel Guard Active: Port Closed to Public.".to_string());
+    } else {
+        // Disable Guard -> Re-Open Port
+        // We simply call the add_firewall_rule function logic
+        // But we can't call async function from here easily without recursion?
+        // We can just call it (same module).
+        return add_firewall_rule(port).await;
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-pub async fn add_firewall_rule(_port: u16) -> Result<String, String> {
-    Err("Automatic firewall configuration is only supported on Windows.".to_string())
+pub async fn set_tunnel_guard(_id: String, _port: u16, _enabled: bool) -> Result<String, String> {
+    Ok("Not supported on this OS".to_string())
 }

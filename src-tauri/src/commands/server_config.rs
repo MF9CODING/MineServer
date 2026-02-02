@@ -142,3 +142,37 @@ pub fn update_server_properties(server_path: String, properties: HashMap<String,
     
     Ok(())
 }
+
+#[tauri::command]
+pub async fn install_grimac(server_path: String) -> Result<String, String> {
+    let path = Path::new(&server_path).join("plugins");
+    
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+    
+    let jar_path = path.join("GrimAC.jar");
+    if jar_path.exists() {
+        return Ok("GrimAC already installed.".to_string());
+    }
+
+    // Direct download from GitHub Releases
+    let url = "https://github.com/GrimAnticheat/Grim/releases/download/2.3.61/GrimAC.jar";
+
+    let client = reqwest::Client::new();
+    let resp = client.get(url)
+        .header("User-Agent", "Mineserver/1.0")
+        .send()
+        .await
+        .map_err(|e| format!("Network Error: {}", e))?;
+    
+    if !resp.status().is_success() {
+        return Err(format!("Download failed with status: {}", resp.status()));
+    }
+    
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    
+    fs::write(&jar_path, &bytes).map_err(|e| format!("File Write Error: {}", e))?;
+    
+    Ok("GrimAC installed successfully! Restart your server.".to_string())
+}

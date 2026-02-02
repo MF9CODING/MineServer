@@ -146,135 +146,117 @@ function MotdEditor({ value, onChange, label, description, icon: Icon, isBedrock
 
     // Robust Minecraft MOTD Parser
     const parseMotd = (text: string) => {
-        if (!text) return "";
+        if (!text) return '<span class="opacity-50 italic">A Minecraft Server</span>';
 
-        // 1. Normalize all valid color code prefixes to §
-        // Matches & or literal \u00A7 followed by a valid code char
-        // We use a capture group for the code to confirm it's valid, but we don't capture the prefix
-        const normalized = text
-            .replace(/&(?=[0-9a-fk-or])/gi, '§')
-            .replace(/\\u00A7(?=[0-9a-fk-or])/gi, '§');
+        // 1. Normalize formatting codes
+        // Replace literal "\u00A7" or "&" with actual § character for parsing
+        let normalized = text
+            .replace(/\\u00A7/g, '§')
+            .replace(/&/g, '§')
+            .replace(/§(?![0-9a-fk-or])/g, ''); // Remove invalid codes
 
-        // 2. Split by § to get segments
-        const parts = normalized.split('§');
+        // 2. Handle newlines (escaped \n)
+        const lines = normalized.split(/\\n|\n/);
 
-        // State
-        let styles = {
-            color: '',
-            bold: false,
-            italic: false,
-            underline: false,
-            strikethrough: false,
-            obfuscated: false
-        };
-
-        let html = "";
-
-        // Helper to escape HTML content
-        const escapeHtml = (str: string) => str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
-        // Color Definitions
+        // Color Map
         const colorMap: Record<string, string> = {
             '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA',
             '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA',
             '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF',
             'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF',
-            'g': '#DDD605', // Bedrock Minecoin Gold
+            'g': '#DDD605', // Minecoin Gold
         };
 
-        // Process parts
-        parts.forEach((part, index) => {
-            // First part is always plain text (unless string starts with §)
-            if (index === 0) {
-                if (part) html += escapeHtml(part);
-                return;
-            }
+        const escapeHtml = (str: string) => str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
 
-            // Extract code and content
-            // If the split resulted in empty string (e.g. §a§l), part is empty. 
-            // We still parse the "code" (which isn't there? wait.)
-            // "§a§lText". Split: ["", "a", "lText"].
-            // Index 1: "a". Code='a', Content="". Update style. Content empty -> no span.
-            // Index 2: "lText". Code='l', Content="Text". Update style. Content -> valid span.
+        return lines.map(line => {
+            const parts = line.split('§');
+            let html = "";
+            let styles = {
+                color: '', bold: false, italic: false, underline: false, strikethrough: false, obfuscated: false
+            };
 
-            if (part.length === 0) return; // Should not happen if followed by char?
-            // Actually split '§a' -> ["", "a"]. "a" has length 1.
-            // If '§' is at end? "Text§". Split ["Text", ""].
-            // Index 1 is "". code undefined.
+            parts.forEach((part, index) => {
+                // The first part (index 0) is text before any color code. 
+                // Subsequent parts start with the char that matches the code.
 
-            if (part.length === 0) return;
-
-            const code = part.charAt(0).toLowerCase();
-            const content = part.slice(1);
-
-            // Update State
-            if (colorMap[code]) {
-                // Color resets all formatting
-                styles = {
-                    color: colorMap[code],
-                    bold: false,
-                    italic: false,
-                    underline: false,
-                    strikethrough: false,
-                    obfuscated: false
-                };
-            } else {
-                // Formatting codes accumulate
-                switch (code) {
-                    case 'l': styles.bold = true; break;
-                    case 'm': styles.strikethrough = true; break;
-                    case 'n': styles.underline = true; break;
-                    case 'o': styles.italic = true; break;
-                    case 'k': styles.obfuscated = true; break;
-                    case 'r': // Reset all
-                        styles = {
-                            color: '',
-                            bold: false,
-                            italic: false,
-                            underline: false,
-                            strikethrough: false,
-                            obfuscated: false
-                        };
-                        break;
+                if (index === 0) {
+                    if (part) html += `<span style="color: #AAAAAA">${escapeHtml(part)}</span>`; // Default gray
+                    return;
                 }
-            }
 
-            // Generate HTML for this segment
-            if (content) {
-                // Handle text-decoration combinations
-                const decorations = [];
-                if (styles.underline) decorations.push('underline');
-                if (styles.strikethrough) decorations.push('line-through');
-                const decorationStyle = decorations.length > 0 ? `text-decoration: ${decorations.join(' ')}` : '';
+                if (part.length === 0) return;
 
-                const finalStyle = [
-                    styles.color ? `color: ${styles.color}` : '',
-                    styles.bold ? 'font-weight: bold' : '',
-                    styles.italic ? 'font-style: italic' : '',
-                    decorationStyle
-                ].filter(Boolean).join('; ');
+                const code = part.charAt(0).toLowerCase();
+                const content = part.slice(1);
 
-                html += `<span style="${finalStyle}">${escapeHtml(content)}</span>`;
-            }
-        });
+                // Update Style
+                if (colorMap[code]) {
+                    styles = {
+                        color: colorMap[code],
+                        bold: false, italic: false, underline: false, strikethrough: false, obfuscated: false
+                    };
+                } else {
+                    switch (code) {
+                        case 'l': styles.bold = true; break;
+                        case 'm': styles.strikethrough = true; break;
+                        case 'n': styles.underline = true; break;
+                        case 'o': styles.italic = true; break;
+                        case 'k': styles.obfuscated = true; break;
+                        case 'r': styles = { color: '', bold: false, italic: false, underline: false, strikethrough: false, obfuscated: false }; break;
+                    }
+                }
 
-        return html || '<span class="opacity-30 italic">No MOTD</span>';
+                if (content) {
+                    const decorations = [];
+                    if (styles.underline) decorations.push('underline');
+                    if (styles.strikethrough) decorations.push('line-through');
+                    const decorationStyle = decorations.length ? `text-decoration: ${decorations.join(' ')}` : '';
+
+                    const styleStr = [
+                        styles.color ? `color: ${styles.color}` : (index === 0 ? 'color: #AAAAAA' : ''), // Keep previous color if not reset
+                        // Wait, if code was a format (l), color persists. If code was color, styles.color updated.
+                        // But if index > 0, we just applied a code.
+                        // If it was a color code, styles.color is set.
+                        // If it was a format code, styles.color retains previous.
+                        // So we just use styles.color. If empty, default?
+                        // Minecraft default is usually white or gray depending on client. Server list often defaults to gray/white.
+                        styles.color ? `color: ${styles.color}` : 'color: #AAAAAA',
+                        styles.bold ? 'font-weight: bold' : '',
+                        styles.italic ? 'font-style: italic' : '',
+                        decorationStyle,
+                        styles.obfuscated ? 'opacity: 0.8; filter: blur(1px)' : '' // Poor man's obfuscation
+                    ].filter(Boolean).join('; ');
+
+                    html += `<span style="${styleStr}">${escapeHtml(content)}</span>`;
+                }
+            });
+            return html || '<br/>';
+        }).join('<br/>');
     };
 
     const insertCode = (code: string) => {
         if (!inputRef.current) return;
         const start = inputRef.current.selectionStart || 0;
         const end = inputRef.current.selectionEnd || 0;
-        const newValue = value.substring(0, start) + `\u00A7${code}` + value.substring(end);
+        // Insert standard valid code. Using \u00A7 (section sign) directly
+        // User reports issues updating. Maybe they need escaped unicode key "\u00A7"? 
+        // Or simple "&"? Most server jars support "&" via plugins, but converting to "\u00A7" creates valid properties.
+        // Let's Insert literal "\u00A7" char for visibility in input?
+        // Actually, user likely sees "A" "A" "A" because I rendered text "A" inside button.
+
+        const textToInsert = `\\u00A7${code}`;
+        const newValue = value.substring(0, start) + textToInsert + value.substring(end);
 
         onChange(newValue);
 
         setTimeout(() => {
             if (inputRef.current) {
-                inputRef.current.selectionStart = inputRef.current.selectionEnd = start + 2;
+                const newCursor = start + textToInsert.length;
+                inputRef.current.selectionStart = inputRef.current.selectionEnd = newCursor;
                 inputRef.current.focus();
             }
         }, 0);
@@ -302,11 +284,14 @@ function MotdEditor({ value, onChange, label, description, icon: Icon, isBedrock
                                 key={code}
                                 type="button"
                                 onClick={() => insertCode(code)}
-                                className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold hover:scale-110 transition-transform bg-surface border border-white/10"
-                                style={{ color: { '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA', '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA', '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF', 'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF' }[code] }}
+                                className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold hover:scale-110 transition-transform bg-surface border border-white/10 font-mono shadow-sm"
+                                style={{
+                                    color: { '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA', '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA', '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF', 'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF' }[code],
+                                    backgroundColor: code === 'f' ? '#333' : 'rgba(0,0,0,0.5)'
+                                }}
                                 title={`Color §${code}`}
                             >
-                                A
+                                {code}
                             </button>
                         ))}
                     </div>
@@ -329,32 +314,48 @@ function MotdEditor({ value, onChange, label, description, icon: Icon, isBedrock
                             <Type className="w-3 h-3" /> Magic
                         </button>
                         <div className="w-[1px] h-6 bg-white/10 mx-1" />
-                        <button onClick={() => insertCode('r')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-white/10 hover:bg-white/20 text-xs font-bold text-red-300 border border-white/5" title="Reset (§r)">
-                            <Eraser className="w-3 h-3" /> Reset
+                        <button onClick={() => onChange('')} type="button" className="h-7 px-2 rounded flex items-center gap-1 bg-white/10 hover:bg-white/20 text-xs font-bold text-red-300 border border-white/5" title="Clear All Text">
+                            <Eraser className="w-3 h-3" /> Clear
                         </button>
                     </div>
                 </div>
 
                 {/* Input */}
-                <input
-                    ref={inputRef}
-                    type="text"
+                <textarea
+                    ref={inputRef as any}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    className="w-full bg-surface border-x border-b border-border/50 rounded-b-xl px-3 py-3 text-sm text-white outline-none focus:border-primary font-mono rounded-t-none"
+                    className="w-full bg-surface border-x border-b border-border/50 rounded-b-xl px-3 py-3 text-sm text-white outline-none focus:border-primary font-mono rounded-t-none resize-y min-h-[80px]"
                     placeholder="A Minecraft Server"
+                    spellCheck={false}
                 />
 
                 {/* Live Preview */}
                 <div className="mt-2">
-                    <div className="text-[10px] font-bold text-text-muted uppercase mb-1 ml-1">Live Preview</div>
-                    <div className="bg-[#0d1117] p-3 rounded-lg border border-border/30 flex items-center gap-3">
-                        <img src="/src/assets/server-icon-placeholder.png" className="w-10 h-10 opacity-70 grayscale" alt="icon" />
-                        <div>
-                            <div className="text-sm text-white font-medium mb-0.5">Minecraft Server</div>
-                            <div className="text-xs font-mono whitespace-pre-wrap leading-tight" dangerouslySetInnerHTML={{
+                    <div className="text-[10px] font-bold text-text-muted uppercase mb-1 ml-1 flex items-center gap-2">
+                        Live Preview
+                        <span className="text-[9px] bg-primary/20 text-primary px-1.5 rounded">Server List</span>
+                    </div>
+                    <div className="bg-[#0d1117] p-3 rounded-lg border border-border/30 flex items-center gap-3 shadow-inner">
+                        <img src="/src/assets/server-icon-placeholder.png" className="w-12 h-12 rounded opacity-90" alt="icon" />
+                        <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-center mb-0.5">
+                                <div className="text-sm text-white font-bold truncate">Minecraft Server</div>
+                                <div className="text-[10px] text-text-muted font-mono">14ms</div>
+                            </div>
+                            <div className="text-xs font-mono whitespace-pre-wrap leading-snug break-words" dangerouslySetInnerHTML={{
                                 __html: parseMotd(value)
                             }} />
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                            <div className="text-[10px] text-text-muted flex items-center gap-1">
+                                <div className="w-3 h-3 relative">
+                                    <div className="absolute bottom-0 left-0 w-0.5 h-1 bg-green-500"></div>
+                                    <div className="absolute bottom-0 left-1 w-0.5 h-2 bg-green-500"></div>
+                                    <div className="absolute bottom-0 left-2 w-0.5 h-3 bg-green-500"></div>
+                                </div>
+                                20/100
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -412,7 +413,12 @@ export function PropertiesEditor({ serverPath, serverType, serverName }: Propert
         try {
             let content = `#Minecraft ${isBedrock ? 'Bedrock' : 'Java'} server properties\n#Modified by Mineserver\n`;
             Object.entries(properties).forEach(([k, v]) => {
-                content += `${k}=${v}\n`;
+                // Escape newlines for proper file formatting
+                // We do NOT escape backslashes automatically to allow manual unicode escapes (like \u00A7)
+                const escapedValue = String(v)
+                    .replace(/\r/g, '')
+                    .replace(/\n/g, '\\n');
+                content += `${k}=${escapedValue}\n`;
             });
 
             await invoke('write_server_file', { path: `${serverPath}\\server.properties`, content });

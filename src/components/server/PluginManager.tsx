@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Server } from '../../stores/appStore';
-import { Search, Download, RefreshCw, Puzzle, ExternalLink, Sparkles, Shield, Gamepad2, Wrench, MessageSquare, Star, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { Search, Download, RefreshCw, X, ChevronLeft, ChevronRight, ExternalLink, Puzzle, Sparkles, Trash2, Star, Shield, Gamepad2, Wrench, MessageSquare, Zap } from "lucide-react";
 import { cn } from '../../lib/utils';
 
 interface PluginManagerProps {
@@ -42,6 +42,7 @@ const CATEGORIES = [
     { id: 'essentials', label: 'Essentials', icon: Star, query: 'essentials', color: 'from-blue-500 to-cyan-500' },
     { id: 'protection', label: 'Protection', icon: Shield, query: 'protection worldguard', color: 'from-green-500 to-emerald-500' },
     { id: 'games', label: 'Minigames', icon: Gamepad2, query: 'minigame bedwars', color: 'from-purple-500 to-pink-500' },
+    { id: 'performance', label: 'Performance', icon: Zap, query: 'performance optimization lithium sodium ferrite', color: 'from-red-500 to-orange-500' },
     { id: 'economy', label: 'Economy', icon: Wrench, query: 'economy vault', color: 'from-amber-500 to-yellow-500' },
     { id: 'chat', label: 'Chat', icon: MessageSquare, query: 'chat', color: 'from-indigo-500 to-blue-500' },
 ];
@@ -54,17 +55,14 @@ export function PluginManager({ server }: PluginManagerProps) {
 
     // Store State
     const [searchQuery, setSearchQuery] = useState('');
-    const [plugins, setPlugins] = useState<PluginResult[]>([]);
-    const [isLoading, setIsLoading] = useState(false); // Default false for Store until query
-    const [installingPlugin, setInstallingPlugin] = useState<string | null>(null);
-
     const [activeCategory, setActiveCategory] = useState('popular');
     const [activeSource, setActiveSource] = useState('modrinth');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [installingPlugin, setInstallingPlugin] = useState<string | null>(null);
 
-    // Installed State
-    const [installedPlugins, setInstalledPlugins] = useState<{ name: string, filename: string }[]>([]);
+    const [installedSearch, setInstalledSearch] = useState("");
+    const [installedPlugins, setInstalledPlugins] = useState<{ name: string, filename: string, enabled: boolean, size: number }[]>([]);
     const [loadingInstalled, setLoadingInstalled] = useState(false);
 
     // Version selection modal
@@ -73,13 +71,25 @@ export function PluginManager({ server }: PluginManagerProps) {
     const [versions, setVersions] = useState<VersionInfo[]>([]);
     const [loadingVersions, setLoadingVersions] = useState(false);
 
+    // Cache State for Background Loading
+    const [cachedResults, setCachedResults] = useState<Record<string, { items: PluginResult[], total: number }>>({});
+    const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
+
     const pluginsPerPage = 20;
+
+    // Helper to update specific result
+    const updateCache = (source: string, items: PluginResult[], total: number) => {
+        setCachedResults(prev => ({
+            ...prev,
+            [source]: { items, total }
+        }));
+    };
 
     // Load Installed Plugins
     const loadInstalled = async () => {
         setLoadingInstalled(true);
         try {
-            const list = await invoke<{ name: string, filename: string }[]>('list_plugins', { serverPath: server.path });
+            const list = await invoke<{ name: string, filename: string, enabled: boolean, size: number }[]>('list_plugins', { serverPath: server.path });
             setInstalledPlugins(list);
         } catch (e) {
             toast.error("Failed to load installed plugins: " + e);
@@ -88,30 +98,51 @@ export function PluginManager({ server }: PluginManagerProps) {
         }
     };
 
-    // Load Store Plugins
+    // Initial Load - Fetch all sources in background
     useEffect(() => {
         if (activeTab === 'store') {
-            loadPlugins(searchQuery || (activeCategory === 'popular' ? '' : activeCategory));
+            // If cache is empty for a source, fetch it
+            JAVA_SOURCES.forEach(source => {
+                if (!cachedResults[source.id]) {
+                    loadSourceData(source.id, searchQuery || (activeCategory === 'popular' ? '' : activeCategory), 1);
+                }
+            });
         } else {
             loadInstalled();
         }
-    }, [activeSource, currentPage, activeTab]); // Reload when tab changes
+    }, [activeTab]); // Run on mount/tab switch
 
-    const loadPlugins = async (query: string = '') => {
-        setIsLoading(true);
+    // When query/category changes, we only reload the ACTIVE source
+    // (User expects search to apply to current view, not necessarily background ones immediately)
+    // When query/category changes, we only reload the ACTIVE source
+    useEffect(() => {
+        if (activeTab === 'store') {
+            const effectiveQuery = searchQuery || (activeCategory === 'popular' ? '' : activeCategory);
+            const isStandardView = currentPage === 1 && !effectiveQuery;
+            const hasCachedData = cachedResults[activeSource]?.items?.length > 0;
+
+            if (isStandardView && hasCachedData) {
+                return;
+            }
+
+            loadSourceData(activeSource, effectiveQuery, currentPage);
+        }
+    }, [activeSource, currentPage, activeCategory, searchQuery]);
+
+    const loadSourceData = async (source: string, query: string, page: number) => {
+        setLoadingStates(prev => ({ ...prev, [source]: true }));
         try {
             let results: PluginResult[] = [];
+            let totalHits = 0;
 
-            // ... (keep existing search logic) ...
-            // We need to re-implement the search dispatch logic here from previous code
-            // Or just copy-paste the body if it was cleaner.
-            // Since this replacement content must match, I will include the full body logic.
+            // Clean query logic
+            const effectiveQuery = query.trim();
 
-            if (activeSource === 'modrinth') {
+            if (source === 'modrinth') {
                 interface PaginatedResult<T> { items: T[]; total: number; }
                 const modrinthResults = await invoke<PaginatedResult<any>>('search_modrinth_plugins', {
-                    query,
-                    offset: (currentPage - 1) * pluginsPerPage
+                    query: effectiveQuery,
+                    offset: (page - 1) * pluginsPerPage
                 });
 
                 results = modrinthResults.items.map((p: any) => ({
@@ -123,26 +154,38 @@ export function PluginManager({ server }: PluginManagerProps) {
                     icon_url: p.icon_url,
                     source: 'modrinth' as const
                 }));
-                setTotalPages(Math.ceil(modrinthResults.total / pluginsPerPage));
-            } else if (activeSource === 'hangar') {
-                results = await invoke<PluginResult[]>('search_hangar_plugins', { query });
-                setTotalPages(1); // Hangar API pagination requires more work, limiting to search for now
-            } else if (activeSource === 'spigot') {
-                results = await invoke<PluginResult[]>('search_spigot_plugins', { query: query || '', page: currentPage });
-                setTotalPages(10);
-            } else if (activeSource === 'polymart') {
-                results = await invoke<PluginResult[]>('search_polymart_plugins', { query: query || 'plugin', page: currentPage });
-                setTotalPages(5);
+                totalHits = modrinthResults.total;
+                setTotalPages(Math.ceil(totalHits / pluginsPerPage)); // Update UI pagination for active
+            } else if (source === 'hangar') {
+                results = await invoke<PluginResult[]>('search_hangar_plugins', { query: effectiveQuery });
+                totalHits = results.length; // Hangar search is limited
+            } else if (source === 'spigot') {
+                results = await invoke<PluginResult[]>('search_spigot_plugins', { query: effectiveQuery, page: page });
+                totalHits = 100; // Mock total for Spigot
+            } else if (source === 'polymart') {
+                results = await invoke<PluginResult[]>('search_polymart_plugins', { query: effectiveQuery || 'plugin', page: page });
+                totalHits = 50; // Mock total for Polymart
             }
 
-            setPlugins(results);
+            updateCache(source, results, totalHits);
+
+            // If this is the active source, ensure pagination state is correct
+            if (source === activeSource) {
+                // For Spigot/Others fixed pages
+                if (source !== 'modrinth') setTotalPages(5);
+            }
+
         } catch (e) {
-            console.error('Failed to load plugins:', e);
-            setPlugins([]);
+            console.error(`Failed to load ${source}:`, e);
+            updateCache(source, [], 0);
         } finally {
-            setIsLoading(false);
+            setLoadingStates(prev => ({ ...prev, [source]: false }));
         }
     };
+
+    // Derived state for UI
+    const plugins = cachedResults[activeSource]?.items || [];
+    const isLoading = loadingStates[activeSource] || false;
 
     const handleDeletePlugin = async (filename: string) => {
         if (!confirm(`Are you sure you want to delete ${filename}?`)) return;
@@ -155,6 +198,24 @@ export function PluginManager({ server }: PluginManagerProps) {
         }
     };
 
+    const handleTogglePlugin = async (filename: string) => {
+        try {
+            await invoke('toggle_plugin', { serverPath: server.path, filename });
+            loadInstalled();
+            toast.success("Plugin status updated");
+        } catch (e) {
+            toast.error("Failed to toggle plugin: " + e);
+        }
+    };
+
+    const formatSize = (bytes: number) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
     // ... (Keep existing helpers: searchPlugins, handleCategoryClick, openVersionModal, installVersion, formatDownloads, getSourceUrl, renderPagination) ...
     // Since I'm replacing the whole component body, I need to include them.
 
@@ -162,14 +223,14 @@ export function PluginManager({ server }: PluginManagerProps) {
         const q = query ?? searchQuery;
         setActiveCategory('');
         setCurrentPage(1);
-        loadPlugins(q);
+        loadSourceData(activeSource, q, 1);
     };
 
     const handleCategoryClick = (category: typeof CATEGORIES[0]) => {
         setActiveCategory(category.id);
         setSearchQuery(category.query);
         setCurrentPage(1);
-        loadPlugins(category.query);
+        loadSourceData(activeSource, category.query, 1);
     };
 
     const openVersionModal = async (plugin: PluginResult) => {
@@ -200,14 +261,26 @@ export function PluginManager({ server }: PluginManagerProps) {
 
         try {
             if (selectedPlugin.source === 'modrinth') {
-                await invoke('install_modrinth_plugin', { projectId: selectedPlugin.id, serverPath: server.path });
+                if (['fabric', 'forge'].includes(server.type)) {
+                    await invoke('install_modrinth_mod', {
+                        projectId: selectedPlugin.id,
+                        serverPath: server.path,
+                        loader: server.type,
+                        gameVersion: server.version
+                    });
+                } else {
+                    await invoke('install_modrinth_plugin', { projectId: selectedPlugin.id, serverPath: server.path });
+                }
             } else if (selectedPlugin.source === 'hangar') {
                 await invoke('install_hangar_plugin', { slug: selectedPlugin.slug, serverPath: server.path });
             } else if (selectedPlugin.source === 'spigot') {
                 await invoke('install_spigot_plugin', { resourceId: selectedPlugin.id, serverPath: server.path });
+            } else if (selectedPlugin.source === 'polymart') {
+                await invoke('install_polymart_plugin', { resourceId: selectedPlugin.id, serverPath: server.path });
             }
             toast.success(`${selectedPlugin.title} installed!`);
         } catch (e) {
+            console.error(e);
             toast.error('Install failed: ' + e);
         } finally {
             setInstallingPlugin(null);
@@ -257,7 +330,9 @@ export function PluginManager({ server }: PluginManagerProps) {
     };
 
     return (
-        <div className="h-full flex flex-col overflow-hidden bg-[#0d1117]">
+        <div className="flex flex-col h-full bg-[#0d1117] rounded-3xl border border-white/5 shadow-2xl overflow-hidden relative backdrop-blur-3xl">
+            {/* Header Gradient - subtle */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500/50 via-pink-500/50 to-blue-500/50 opacity-20" />
             {/* Main Header / Tab Switcher */}
             <div className="p-5 border-b border-border/50 bg-gradient-to-r from-purple-500/10 to-pink-500/10 shrink-0">
                 <div className="flex items-center justify-between mb-4">
@@ -300,83 +375,113 @@ export function PluginManager({ server }: PluginManagerProps) {
                 {activeTab === 'store' ? (
                     <>
                         {/* Source Tabs */}
-                        <div className="flex gap-1 mb-4 p-1 bg-black/30 rounded-xl">
+                        <div className="flex gap-2 mb-6 p-1.5 bg-black/40 rounded-2xl border border-white/5">
                             {JAVA_SOURCES.map((source) => (
-                                <button key={source.id} onClick={() => { setActiveSource(source.id); setCurrentPage(1); }} className={cn("flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all", activeSource === source.id ? `bg-gradient-to-r ${source.color} text-white shadow-lg` : "text-text-muted hover:text-white hover:bg-white/5")}>{source.name}</button>
+                                <button key={source.id} onClick={() => { setActiveSource(source.id); setCurrentPage(1); }}
+                                    className={cn("flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 relative overflow-hidden group",
+                                        activeSource === source.id ? "text-white shadow-lg" : "text-text-muted hover:text-white hover:bg-white/5")}
+                                >
+                                    {activeSource === source.id && (
+                                        <div className={cn("absolute inset-0 opacity-100 bg-gradient-to-r", source.color)} />
+                                    )}
+                                    <span className="relative z-10 flex items-center justify-center gap-2">
+                                        {source.name}
+                                    </span>
+                                </button>
                             ))}
                         </div>
 
                         {/* Search & Categories */}
-                        <div className="flex flex-col gap-4">
-                            <form onSubmit={(e) => { e.preventDefault(); searchPlugins(); }} className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search plugins..." className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-text-muted/50 outline-none focus:border-purple-500 focus:bg-black/60 transition-all" />
+                        <div className="flex flex-col gap-5 mb-8">
+                            <form onSubmit={(e) => { e.preventDefault(); searchPlugins(); }} className="relative group z-10">
+                                <div className={cn("absolute -inset-0.5 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 blur",
+                                    activeSource === 'modrinth' ? "bg-gradient-to-r from-green-500 to-emerald-500" :
+                                        activeSource === 'hangar' ? "bg-gradient-to-r from-blue-500 to-cyan-500" :
+                                            "bg-gradient-to-r from-purple-500 to-pink-500"
+                                )}></div>
+                                <div className="relative flex items-center bg-[#0d1117] rounded-xl border border-white/10 group-focus-within:border-transparent transition-all">
+                                    <Search className="absolute left-4 w-5 h-5 text-text-muted group-focus-within:text-white transition-colors" />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder={`Search ${activeSource.charAt(0).toUpperCase() + activeSource.slice(1)} plugins...`}
+                                        className="w-full bg-transparent border-none py-4 pl-12 pr-4 text-white placeholder:text-text-muted/50 outline-none font-medium"
+                                    />
+                                    <button type="submit" disabled={isLoading} className="absolute right-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-white text-xs font-bold transition-all">
+                                        {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Search'}
+                                    </button>
                                 </div>
-                                <button type="submit" disabled={isLoading} className="px-5 py-2.5 text-white font-bold text-sm rounded-xl disabled:opacity-50 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 shadow-lg shadow-purple-500/20">{isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Search'}</button>
                             </form>
-                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+
+                            <div className="flex flex-wrap gap-2">
                                 {CATEGORIES.map((cat) => (
-                                    <button key={cat.id} onClick={() => handleCategoryClick(cat)} className={cn("flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap border", activeCategory === cat.id ? `bg-gradient-to-r ${cat.color} border-transparent text-white` : "bg-white/5 border-white/10 text-text-muted hover:border-white/30 hover:text-white")}>
+                                    <button key={cat.id} onClick={() => handleCategoryClick(cat)}
+                                        className={cn("px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2",
+                                            activeCategory === cat.id
+                                                ? `bg-gradient-to-r ${cat.color} border-transparent text-white shadow-lg`
+                                                : "bg-surface/50 border-white/5 text-text-muted hover:bg-surface hover:text-white hover:border-white/20")}
+                                    >
                                         <cat.icon className="w-3.5 h-3.5" />
                                         {cat.label}
                                     </button>
                                 ))}
                             </div>
                         </div>
-                    </>
-                ) : (
-                    <div className="flex justify-between items-center">
-                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2 text-xs text-blue-300 flex items-center gap-2">
-                            <Sparkles className="w-4 h-4" />
-                            Managing plugins in <code>/plugins</code> folder
-                        </div>
-                        <button onClick={loadInstalled} className="p-2 hover:bg-surface rounded-lg text-text-muted hover:text-white transition-colors" title="Refresh List">
-                            <RefreshCw className={cn("w-5 h-5", loadingInstalled && "animate-spin")} />
-                        </button>
-                    </div>
-                )}
-            </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-5">
-                {activeTab === 'store' ? (
-                    <>
+                        {/* Results Grid */}
                         {isLoading ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {[1, 2, 3, 4, 5, 6].map((i) => (
-                                    <div key={i} className="bg-surface/30 rounded-xl p-4 animate-pulse"><div className="flex gap-4"><div className="w-12 h-12 rounded-xl bg-white/10" /><div className="flex-1"><div className="h-4 bg-white/10 rounded w-1/2 mb-2" /><div className="h-3 bg-white/5 rounded w-full" /></div></div></div>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+                                    <div key={i} className="bg-surface/30 rounded-2xl p-5 h-40 animate-pulse border border-white/5"><div className="flex gap-4"><div className="w-12 h-12 rounded-xl bg-white/5" /><div className="flex-1 space-y-2"><div className="h-4 bg-white/5 rounded w-2/3" /><div className="h-3 bg-white/5 rounded w-full" /><div className="h-3 bg-white/5 rounded w-4/5" /></div></div></div>
                                 ))}
                             </div>
                         ) : plugins.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-center text-text-muted">
-                                <Puzzle className="w-12 h-12 opacity-20 mb-4" />
-                                <h3 className="text-lg font-bold text-white mb-1">No plugins found</h3>
-                                <p className="text-sm">Try searching for something else.</p>
+                            <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+                                <Puzzle className="w-16 h-16 text-text-muted mb-4 opacity-20" />
+                                <h3 className="text-xl font-bold text-white mb-2">No plugins found</h3>
+                                <p className="text-text-muted max-w-md">We couldn't find any plugins matching your search. Try adjusting keywords or switching sources.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 pb-10">
                                 {plugins.map((plugin) => (
-                                    <div key={plugin.id} className="bg-surface/30 hover:bg-surface/50 border border-border/30 rounded-xl p-4 transition-all group hover:border-purple-500/30 flex flex-col">
-                                        <div className="flex gap-3 mb-3">
-                                            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-white/5 bg-black/20">
-                                                {plugin.icon_url ? <img src={plugin.icon_url} alt="" className="w-full h-full object-cover" /> : <Puzzle className="w-6 h-6 text-purple-400" />}
+                                    <div key={plugin.id} className="group relative bg-[#161b22]/80 hover:bg-[#1c2128] backdrop-blur border border-white/5 hover:border-purple-500/30 rounded-2xl p-4 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 hover:-translate-y-1 flex flex-col">
+                                        <div className="flex gap-4 mb-3">
+                                            <div className="w-14 h-14 rounded-xl shrink-0 overflow-hidden bg-black/40 border border-white/5 p-0.5 shadow-inner">
+                                                {plugin.icon_url ? (
+                                                    <img src={plugin.icon_url} alt="" className="w-full h-full object-cover rounded-[10px]" loading="lazy" />
+                                                ) : (
+                                                    <div className="w-full h-full rounded-[10px] bg-white/5 flex items-center justify-center"><Puzzle className="w-6 h-6 text-white/20" /></div>
+                                                )}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-0.5">
-                                                    <h4 className="font-bold text-white text-sm truncate" title={plugin.title}>{plugin.title}</h4>
-                                                    <a href={getSourceUrl(plugin)} target="_blank" rel="noreferrer" className="text-text-muted hover:text-purple-400 transition-colors opacity-0 group-hover:opacity-100"><ExternalLink className="w-3 h-3" /></a>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <a href={getSourceUrl(plugin)} target="_blank" rel="noreferrer" className="group/link flex items-center gap-1.5 min-w-0 max-w-[80%]">
+                                                        <h4 className="font-bold text-white text-[15px] truncate leading-tight group-hover/link:text-purple-400 transition-colors" title={plugin.title}>{plugin.title}</h4>
+                                                        <ExternalLink className="w-3 h-3 text-text-muted opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
+                                                    </a>
+                                                    {/* Source Icon/Badge */}
+                                                    <div className="shrink-0" title={plugin.source}>
+                                                        {plugin.source === 'modrinth' && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />}
+                                                        {plugin.source === 'spigot' && <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />}
+                                                        {plugin.source === 'hangar' && <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />}
+                                                        {plugin.source === 'polymart' && <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" />}
+                                                    </div>
                                                 </div>
-                                                <p className="text-xs text-text-muted line-clamp-2 leading-relaxed h-9">{plugin.description}</p>
+                                                <p className="text-xs text-text-muted line-clamp-2 mt-1.5 leading-relaxed opacity-80 h-8">{plugin.description}</p>
                                             </div>
                                         </div>
-                                        <div className="mt-auto flex items-center justify-between pt-3 border-t border-white/5">
-                                            <span className="flex items-center gap-1.5 text-xs text-text-muted font-mono"><Download className="w-3 h-3" />{formatDownloads(plugin.downloads)}</span>
+
+                                        <div className="mt-auto pt-3 flex items-center justify-between border-t border-white/5">
+                                            <div className="flex items-center gap-3 text-xs text-text-muted font-medium">
+                                                <span className="flex items-center gap-1.5"><Download className="w-3.5 h-3.5 opacity-70" /> {formatDownloads(plugin.downloads)}</span>
+                                            </div>
                                             <button
                                                 onClick={() => openVersionModal(plugin)}
                                                 disabled={!!installingPlugin}
-                                                className="px-3 py-1.5 text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 bg-purple-500 hover:bg-purple-600 shadow-lg shadow-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
-                                                <Download className="w-3 h-3" /> Install
+                                                className="px-4 py-2 bg-white/5 hover:bg-purple-600 hover:text-white text-text-muted rounded-lg text-xs font-bold transition-all flex items-center gap-2 group-focus:ring-2 disabled:opacity-50"
+                                            >
+                                                Install <Download className="w-3 h-3" />
                                             </button>
                                         </div>
                                     </div>
@@ -386,42 +491,91 @@ export function PluginManager({ server }: PluginManagerProps) {
                         {!isLoading && plugins.length > 0 && renderPagination()}
                     </>
                 ) : (
-                    // Installed Tab Content
-                    <div className="space-y-4">
-                        {loadingInstalled ? (
-                            <div className="flex items-center justify-center py-20"><RefreshCw className="w-8 h-8 text-purple-500 animate-spin" /></div>
-                        ) : installedPlugins.length === 0 ? (
-                            <div className="text-center py-20 text-text-muted">
-                                <Puzzle className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                                <h3 className="text-xl font-bold text-white mb-2">No Plugins Installed</h3>
-                                <p>Go to the <b>Store</b> tab to discover and install plugins.</p>
+                    <div className="flex flex-col h-full animate-in fade-in duration-500">
+                        {/* Installed Toolbar */}
+                        <div className="flex items-center justify-between gap-4 mb-6">
+                            <div className="relative flex-1 max-w-md group">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-purple-400 transition-colors" />
+                                <input
+                                    type="text"
+                                    value={installedSearch}
+                                    onChange={(e) => setInstalledSearch(e.target.value)}
+                                    placeholder="Filter installed plugins..."
+                                    className="w-full bg-[#161b22] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-text-muted/50 outline-none focus:border-purple-500/50 focus:bg-[#1c2128] transition-all"
+                                />
                             </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {installedPlugins.map((p) => (
-                                    <div key={p.filename} className="bg-surface/30 border border-border/50 rounded-xl p-4 flex flex-col group hover:border-white/20 transition-all">
-                                        <div className="flex items-start gap-3 mb-4">
-                                            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-400">
-                                                <Puzzle className="w-5 h-5" />
+                            <div className="flex items-center gap-3">
+                                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2 text-xs text-blue-300 flex items-center gap-2">
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>{installedPlugins.length} Installed</span>
+                                </div>
+                                <button onClick={loadInstalled} className="p-2.5 bg-surface hover:bg-white/5 border border-white/5 rounded-xl text-text-muted hover:text-white transition-all group" title="Refresh List">
+                                    <RefreshCw className={cn("w-4 h-4 group-active:rotate-180 transition-transform", loadingInstalled && "animate-spin")} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Installed List */}
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                            {installedPlugins.filter(p => p.name.toLowerCase().includes(installedSearch.toLowerCase())).length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                                    <Puzzle className="w-16 h-16 text-text-muted mb-4 opacity-20" />
+                                    <h3 className="text-lg font-bold text-white">No plugins found</h3>
+                                    <p className="text-sm text-text-muted">No installed plugins match your search.</p>
+                                </div>
+                            ) : (
+                                installedPlugins
+                                    .filter(p => p.name.toLowerCase().includes(installedSearch.toLowerCase()))
+                                    .map((p) => (
+                                        <div key={p.filename} className={cn("group flex items-center gap-4 p-4 rounded-xl border transition-all duration-300",
+                                            p.enabled
+                                                ? "bg-[#161b22]/60 hover:bg-[#161b22] border-white/5 hover:border-white/10"
+                                                : "bg-red-500/5 hover:bg-red-500/10 border-red-500/10 hover:border-red-500/20"
+                                        )}>
+                                            {/* Icon */}
+                                            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors shadow-inner",
+                                                p.enabled ? "bg-black/40 text-purple-400" : "bg-red-900/20 text-red-400"
+                                            )}>
+                                                <Puzzle className="w-6 h-6" />
                                             </div>
+
+                                            {/* Info */}
                                             <div className="flex-1 min-w-0">
-                                                <h4 className="font-bold text-white text-sm truncate" title={p.filename}>{p.name}</h4>
-                                                <p className="text-xs text-text-muted truncate font-mono mt-0.5">{p.filename}</p>
+                                                <div className="flex items-center gap-3">
+                                                    <h4 className={cn("font-bold text-sm truncate", p.enabled ? "text-white group-hover:text-purple-300 transition-colors" : "text-text-muted line-through opacity-80 decoration-2 decoration-red-500/50")}>{p.name}</h4>
+                                                    {!p.enabled && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 uppercase tracking-wider">Disabled</span>}
+                                                </div>
+                                                <div className="flex items-center gap-3 mt-1.5 text-xs text-text-muted font-mono">
+                                                    <span className="truncate max-w-[300px]" title={p.filename}>{p.filename}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-white/10" />
+                                                    <span>{formatSize(p.size)}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="flex items-center gap-3 opacity-90 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => handleTogglePlugin(p.filename)}
+                                                    className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border",
+                                                        p.enabled
+                                                            ? "bg-amber-500/5 border-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-white hover:border-transparent"
+                                                            : "bg-green-500/5 border-green-500/20 text-green-500 hover:bg-green-500 hover:text-white hover:border-transparent"
+                                                    )}
+                                                >
+                                                    {p.enabled ? 'Disable' : 'Enable'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeletePlugin(p.filename)}
+                                                    className="p-2 rounded-lg bg-red-500/5 text-red-400 border border-red-500/10 hover:bg-red-500 hover:text-white hover:border-transparent transition-all"
+                                                    title="Delete Plugin"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="mt-auto flex items-center justify-end gap-2">
-                                            <button
-                                                onClick={() => handleDeletePlugin(p.filename)}
-                                                className="px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                    ))
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

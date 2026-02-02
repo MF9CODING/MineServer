@@ -1,5 +1,6 @@
 pub mod models;
 pub mod commands;
+pub mod scheduler;
 
 use tauri::Manager;
 
@@ -16,6 +17,11 @@ pub fn run() {
         .manage(commands::runner::ServerProcessState::new())
         .manage(commands::system::SystemState::new())
         .manage(commands::network_manager::NetworkState::new())
+        .manage(scheduler::SchedulerState::new())
+        .setup(|app| {
+            scheduler::init_scheduler(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             commands::server::delete_server,
@@ -74,9 +80,11 @@ pub fn run() {
             commands::network_manager::get_public_ip,
             commands::network_manager::check_firewall_rule,
             commands::network_manager::add_firewall_rule,
+            commands::network_manager::set_tunnel_guard,
             commands::server_config::get_java_versions,
             commands::server_config::read_server_properties,
             commands::server_config::update_server_properties,
+            commands::server_config::install_grimac,
             commands::plugins::list_plugins,
             commands::plugins::search_modrinth_plugins,
             commands::plugins::install_modrinth_plugin,
@@ -91,7 +99,9 @@ pub fn run() {
             commands::plugins::install_poggit_plugin,
             commands::plugins::search_curseforge_plugins,
             commands::plugins::search_polymart_plugins,
+            commands::plugins::install_polymart_plugin,
             commands::plugins::get_plugin_versions,
+            commands::plugins::toggle_plugin,
             commands::backup::create_backup,
             commands::backup::list_backups,
             commands::backup::delete_backup,

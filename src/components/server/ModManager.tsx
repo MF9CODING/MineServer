@@ -57,8 +57,10 @@ export function ModManager({ server }: ModManagerProps) {
     const [activeView, setActiveView] = useState('modrinth');
     const [activeCategory, setActiveCategory] = useState('popular');
     const [searchQuery, setSearchQuery] = useState('');
-    const [addons, setAddons] = useState<Addon[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+
+    // Cache State
+    const [cachedAddons, setCachedAddons] = useState<Record<string, { items: Addon[], total: number }>>({});
+    const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -83,63 +85,74 @@ export function ModManager({ server }: ModManagerProps) {
         return true;
     });
 
+    // Helper to update cache
+    const updateCache = (source: string, items: Addon[], total: number) => {
+        setCachedAddons(prev => ({ ...prev, [source]: { items, total } }));
+    };
+
+    // Initial Load - Fetch all sources in background
     useEffect(() => {
-        loadBrowseData(activeView);
+        availableSources.forEach(source => {
+            if (!cachedAddons[source.id]) {
+                loadSourceData(source.id, '', 1, 'popular');
+            }
+        });
     }, [server.path]);
 
-    // Load data when view changes
+    // Update active view when params change
     useEffect(() => {
+        loadSourceData(activeView, searchQuery, currentPage, activeCategory);
+    }, [activeView, activeCategory, currentPage]); // Only reload active if params change
+
+    // Search trigger
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
         setCurrentPage(1);
-        loadBrowseData(activeView);
-    }, [activeView, activeCategory]);
+        loadSourceData(activeView, searchQuery, 1, activeCategory);
+    };
 
-    // Reload when page changes
-    useEffect(() => {
-        loadBrowseData(activeView);
-    }, [currentPage]);
-
-    const loadBrowseData = async (sourceId: string) => {
-        setIsLoading(true);
-        setAddons([]); // Clear previous
+    const loadSourceData = async (sourceId: string, query: string, page: number, category: string) => {
+        setLoadingStates(prev => ({ ...prev, [sourceId]: true }));
         try {
             let results: any[] = [];
-            let effectiveQuery = searchQuery;
+            let effectiveQuery = query;
 
             // Append category to query if not 'popular'/empty
-            if (activeCategory !== 'popular' && activeCategory !== 'new' && activeCategory !== 'updated') {
-                effectiveQuery = `${searchQuery} ${CATEGORIES.find(c => c.id === activeCategory)?.query || ''}`.trim();
+            if (category !== 'popular' && category !== 'new' && category !== 'updated') {
+                effectiveQuery = `${query} ${CATEGORIES.find(c => c.id === category)?.query || ''}`.trim();
             }
+
+            let totalHits = 0;
 
             if (sourceId === 'modrinth') {
                 if (isPluginServer) {
                     const res = await invoke<PaginatedResult<any>>('search_modrinth_plugins', {
                         query: effectiveQuery,
-                        offset: (currentPage - 1) * 20
+                        offset: (page - 1) * 20
                     });
                     results = res.items;
-                    setTotalPages(Math.ceil(res.total / 20));
+                    totalHits = res.total;
                 } else {
                     const res = await invoke<PaginatedResult<any>>('search_modrinth_mods', {
                         query: effectiveQuery,
                         loader: loaderType,
-                        offset: (currentPage - 1) * 20
+                        offset: (page - 1) * 20
                     });
                     results = res.items;
-                    // Limit to 50 pages reasonably or use actual total if not immense
-                    setTotalPages(Math.min(50, Math.ceil(res.total / 20)));
+                    totalHits = res.total;
                 }
             } else if (sourceId === 'spigot') {
-                results = await invoke('search_spigot_plugins', { query: searchQuery, page: currentPage }); // Uses 'page'
-                setTotalPages(10);
+                results = await invoke('search_spigot_plugins', { query: effectiveQuery, page: page });
+                totalHits = 100;
             } else if (sourceId === 'hangar') {
-                results = await invoke('search_hangar_plugins', { query: searchQuery });
-                setTotalPages(5);
+                results = await invoke('search_hangar_plugins', { query: effectiveQuery });
+                totalHits = 50;
             } else if (sourceId === 'polymart') {
-                results = await invoke('search_polymart_plugins', { query: searchQuery, page: currentPage });
-                setTotalPages(5);
+                results = await invoke('search_polymart_plugins', { query: effectiveQuery, page: page });
+                totalHits = 50;
             } else if (sourceId === 'poggit') {
-                results = await invoke('search_poggit_plugins', { query: searchQuery });
-                setTotalPages(1);
+                results = await invoke('search_poggit_plugins', { query: effectiveQuery });
+                totalHits = 20;
             }
 
             // Map results to unified interface
@@ -154,21 +167,25 @@ export function ModManager({ server }: ModManagerProps) {
                 project_id: r.project_id || r.id
             }));
 
-            setAddons(mapped);
+            updateCache(sourceId, mapped, Math.ceil(totalHits / 20));
+
+            // Update main pagination only if active
+            if (sourceId === activeView) {
+                setTotalPages(Math.ceil(totalHits / 20)); // Approximate or exact
+            }
 
         } catch (e) {
             console.error(e);
             toast.error(`Failed to fetch from ${sourceId}`);
+            updateCache(sourceId, [], 0);
         } finally {
-            setIsLoading(false);
+            setLoadingStates(prev => ({ ...prev, [sourceId]: false }));
         }
     };
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        setCurrentPage(1);
-        loadBrowseData(activeView);
-    };
+    // Derived state for UI
+    const addons = cachedAddons[activeView]?.items || [];
+    const isLoading = loadingStates[activeView] || false;
 
     // Open Modal
     const handleInstallClick = async (addon: Addon) => {

@@ -44,12 +44,22 @@ export function SecurityManager({ server }: SecurityManagerProps) {
         updateServer(server.id, { tunnelGuard: newState });
 
         try {
-            // TODO: Implement backend command
-            // await invoke('set_tunnel_guard', { id: server.id, enabled: newState });
+            // Real implementation
+            await invoke('set_tunnel_guard', { id: server.id, port: server.port, enabled: newState });
             toast.success(newState ? "Tunnel Guard ACTIVE: Direct connections blocked." : "Tunnel Guard Disabled.");
         } catch (e) {
             updateServer(server.id, { tunnelGuard: !newState }); // Revert
-            toast.error("Failed to toggle Tunnel Guard: " + e);
+            toast.error("Failed to toggle Tunnel Guard via Firewall: " + e);
+        }
+    };
+
+    const handleInstallBotProtection = async () => {
+        const toastId = toast.loading("Installing Grim Anti-Cheat...");
+        try {
+            await invoke('install_grimac', { serverPath: server.path });
+            toast.success("GrimAC Installed! Restart server to apply.", { id: toastId });
+        } catch (e) {
+            toast.error("Installation Failed: " + e, { id: toastId });
         }
     };
 
@@ -240,7 +250,7 @@ export function SecurityManager({ server }: SecurityManagerProps) {
                             <p className="text-sm text-text-muted mb-3">
                                 Automatically install and configure <strong>GrimAC</strong>, the best open-source anti-cheat/anti-bot for Java Edition.
                             </p>
-                            <button className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-bold rounded-lg border border-white/10 transition-colors">
+                            <button onClick={handleInstallBotProtection} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-bold rounded-lg border border-white/10 transition-colors">
                                 Check Compatibility & Install
                             </button>
                         </div>

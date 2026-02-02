@@ -475,7 +475,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                                 )}
                             </h2>
                             <p className="text-xs text-text-muted">
-                                {info?.level_name || 'world'} - {info?.exists ? formatSize(info.total_size) : 'No world'}
+                                {info?.level_name || 'world'} - {info?.exists ? formatSize(info.total_size) : 'Pending Generation'}
                             </p>
                         </div>
                     </div>
@@ -516,7 +516,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                             type="overworld"
                             exists={hasOverworld || false}
                             size={getDimensionSize('overworld')}
-                            serverStatus={server.status}
+                            server={server}
                             onUpload={() => overworldInputRef.current?.click()}
                             onReset={() => openRegenModal('overworld')}
                             onDelete={() => handleDelete('overworld')}
@@ -529,7 +529,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                             type="nether"
                             exists={hasNether || false}
                             size={getDimensionSize('nether')}
-                            serverStatus={server.status}
+                            server={server}
                             onUpload={() => netherInputRef.current?.click()}
                             onReset={() => openRegenModal('nether')}
                             onDelete={() => handleDelete('nether')}
@@ -542,7 +542,7 @@ export default function WorldManager({ server }: WorldManagerProps) {
                             type="end"
                             exists={hasEnd || false}
                             size={getDimensionSize('end')}
-                            serverStatus={server.status}
+                            server={server}
                             onUpload={() => endInputRef.current?.click()}
                             onReset={() => openRegenModal('end')}
                             onDelete={() => handleDelete('end')}
@@ -826,7 +826,7 @@ interface DimensionCardProps {
     type: 'overworld' | 'nether' | 'end';
     exists: boolean;
     size: number;
-    serverStatus: string;
+    server: Server;
     onUpload: () => void;
     onReset: () => void;
     onDelete: () => void;
@@ -834,10 +834,29 @@ interface DimensionCardProps {
     formatSize: (bytes: number) => string;
 }
 
-function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, onDelete, onDownload, formatSize }: DimensionCardProps) {
+function DimensionCard({ type, exists, size, server, onUpload, onReset, onDelete, onDownload, formatSize }: DimensionCardProps) {
     const dimInfo = DIMENSION_INFO[type];
     const DimIcon = dimInfo.icon;
-    const isRunning = serverStatus === 'running';
+    const isRunning = server.status === 'running';
+
+    // Logic for Bedrock detection
+    const isBedrock = server.type?.toLowerCase().includes('bedrock');
+    const isIntegrated = isBedrock && type !== 'overworld';
+
+    // Status Display Logic
+    let statusDisplay = null;
+    if (exists) {
+        statusDisplay = (
+            <>
+                <HardDrive className="w-3 h-3" />
+                {formatSize(size)}
+            </>
+        );
+    } else if (isIntegrated) {
+        statusDisplay = <span className="text-blue-400 font-medium">Integrated</span>;
+    } else {
+        statusDisplay = <span className="text-yellow-400 font-medium animate-pulse">Pending Generation</span>;
+    }
 
     return (
         <div className={cn(
@@ -854,14 +873,7 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
                     <div className="flex-1">
                         <h4 className="font-bold text-white text-lg">{dimInfo.name}</h4>
                         <p className="text-xs text-text-muted flex items-center gap-1.5">
-                            {exists ? (
-                                <>
-                                    <HardDrive className="w-3 h-3" />
-                                    {formatSize(size)}
-                                </>
-                            ) : (
-                                <span className="italic">Not created</span>
-                            )}
+                            {statusDisplay}
                         </p>
                     </div>
                 </div>
@@ -875,7 +887,7 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
                 <div className="grid grid-cols-4 gap-2">
                     <button
                         onClick={onUpload}
-                        disabled={isRunning}
+                        disabled={isRunning || isIntegrated}
                         className={cn(
                             "py-2.5 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50",
                             "bg-primary/20 text-primary hover:bg-primary/30"
@@ -887,7 +899,7 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
 
                     <button
                         onClick={onDownload}
-                        disabled={isRunning || !exists}
+                        disabled={isRunning || !exists || isIntegrated}
                         className={cn(
                             "py-2.5 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50",
                             "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
@@ -899,7 +911,7 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
 
                     <button
                         onClick={onReset}
-                        disabled={isRunning || !exists}
+                        disabled={isRunning || isIntegrated}
                         className={cn(
                             "py-2.5 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50",
                             dimInfo.bgColor,
@@ -912,7 +924,7 @@ function DimensionCard({ type, exists, size, serverStatus, onUpload, onReset, on
                     </button>
                     <button
                         onClick={onDelete}
-                        disabled={isRunning || !exists}
+                        disabled={isRunning || !exists || isIntegrated}
                         className="py-2.5 rounded-lg font-bold text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center justify-center disabled:opacity-50"
                         title="Delete"
                     >

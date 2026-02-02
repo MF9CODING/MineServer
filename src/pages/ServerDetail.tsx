@@ -79,10 +79,8 @@ export function ServerDetail() {
 
         // Fetch MOTD
         if (server) {
-            invoke<Record<string, string>>('get_server_properties', {
-                id: server.id,
-                serverPath: server.path,
-                serverType: server.type
+            invoke<Record<string, string>>('read_server_properties', {
+                serverPath: server.path
             }).then(props => {
                 if (props['motd']) setMotd(props['motd']);
                 else if (props['server-name']) setMotd(props['server-name']); // Bedrock fallback
@@ -200,19 +198,32 @@ export function ServerDetail() {
 
     // Live logs from Backend
     useEffect(() => {
-        let unlisten: () => void;
+        let unlistenFn: (() => void) | undefined;
+        let isActive = true;
+
         async function setupListener() {
             if (server) {
-                unlisten = await listen(`server-log:${server.id}`, (event: any) => {
-                    setLogs(prev => [...prev.slice(-500), event.payload]);
+                const unlisten = await listen(`server-log:${server.id}`, (event: any) => {
+                    if (isActive) {
+                        setLogs(prev => [...prev.slice(-500), event.payload]);
+                    }
                 });
+
+                if (isActive) {
+                    unlistenFn = unlisten;
+                } else {
+                    unlisten();
+                }
             }
         }
+
         setupListener();
+
         return () => {
-            if (unlisten) unlisten();
+            isActive = false;
+            if (unlistenFn) unlistenFn();
         };
-    }, [server]);
+    }, [server?.id]);
 
     const sendCommand = async (e?: React.FormEvent, cmdStr?: string) => {
         e?.preventDefault();
