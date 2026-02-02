@@ -6,6 +6,7 @@ const serverTypeNames: Record<ServerType, string> = {
     vanilla: 'Vanilla',
     paper: 'Paper',
     forge: 'Forge',
+    neoforge: 'NeoForge',
     fabric: 'Fabric',
     bedrock: 'Bedrock',
     spigot: 'Spigot',
