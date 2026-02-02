@@ -238,11 +238,45 @@ pub fn archive_files(server_path: String, files: Vec<String>, archive_name: Stri
 #[tauri::command]
 pub fn extract_file(server_path: String, file_name: String) -> Result<(), String> {
     let root = Path::new(&server_path);
+    // Basic safety check for server path context
+    if !server_path.contains("Servers") && !server_path.contains("servers") {
+         return Err("Safety check failed: Invalid server path".to_string());
+    }
+
     let archive_path = root.join(&file_name);
     
     let file = fs::File::open(&archive_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
 
-    archive.extract(root).map_err(|e| e.to_string())?;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        
+        // SECURITY: "Zip Slip" protection using enclosed_name()
+        // This ensures the path doesn't escape the target directory
+        let outpath = match file.enclosed_name() {
+            Some(path) => path.to_owned(),
+            None => continue, // Skip suspicious paths
+        };
+
+        let dest_path = root.join(outpath);
+        
+        // Final Double Check: destination must start with root
+        if !dest_path.starts_with(root) {
+             return Err(format!("Security Warning: potential path traversal detected for file {}", file.name()));
+        }
+
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(p) = dest_path.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                }
+            }
+            let mut outfile = fs::File::create(&dest_path).map_err(|e| e.to_string())?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+    
     Ok(())
 }

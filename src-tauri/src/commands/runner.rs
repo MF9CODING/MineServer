@@ -169,17 +169,32 @@ pub fn stop_server(
     let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
 
     if let Some(mut child) = processes.remove(&id) {
-        // Try graceful stop first
+        // 1. Try graceful stop
         if let Some(mut stdin) = child.stdin.take() {
             let _ = writeln!(stdin, "stop");
         }
+
+        // 2. Wait up to 15 seconds for graceful exit
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(15);
         
-        // Give it time, or kill
-        // detailed implementation can poll exit status, for now assuming it stops or we kill it
-        // Simpler for MVP: just kill if valid
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => return Ok("Server stopped gracefully".into()),
+                Ok(None) => {
+                    if start.elapsed() >= timeout {
+                        break; // Timeout, force kill
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                Err(_) => break, // Error checking, just kill
+            }
+        }
+        
+        // 3. Force Kill
         let _ = child.kill(); 
         
-        Ok("Server stopped".into())
+        Ok("Server stopped (Forced)".into())
     } else {
         Err("Server not running".into())
     }
