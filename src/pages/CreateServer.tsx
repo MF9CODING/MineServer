@@ -18,7 +18,7 @@ const generateId = () => typeof crypto !== 'undefined' && crypto.randomUUID ? cr
 
 const serverSchema = z.object({
     name: z.string().min(3, "Name must be at least 3 characters").max(32, "Name too long"),
-    type: z.enum(['vanilla', 'paper', 'bedrock', 'forge', 'fabric', 'spigot', 'purpur'] as [string, ...string[]]),
+    type: z.enum(['vanilla', 'paper', 'bedrock', 'forge', 'neoforge', 'fabric', 'spigot', 'purpur'] as [string, ...string[]]),
     version: z.string().min(1, "Version is required"),
     port: z.number().min(1024, "Port must be > 1024").max(65535, "Port must be < 65535"),
     ram: z.number().min(512, "Minimum 512MB RAM").max(16384, "Maximum 16GB RAM"),
@@ -34,7 +34,8 @@ const SERVER_OPTIONS: { id: ServerType; name: string; desc: string; icon: any; r
     { id: 'vanilla', name: 'Vanilla', desc: 'Official Minecraft server', icon: Box, category: 'java' },
     { id: 'spigot', name: 'Spigot', desc: 'Plugin-ready, parent of Paper', icon: Play, category: 'java' },
     { id: 'purpur', name: 'Purpur', desc: 'Paper fork with extras', icon: Shield, category: 'java' },
-    { id: 'forge', name: 'Forge', desc: 'For mods like RLCraft', icon: Shield, category: 'modded' },
+    { id: 'forge', name: 'Forge', desc: 'Classic modding platform', icon: Shield, category: 'modded' },
+    { id: 'neoforge', name: 'NeoForge', desc: 'Modern Forge fork, 1.20.1+', icon: Zap, recommended: true, category: 'modded' },
     { id: 'fabric', name: 'Fabric', desc: 'Lightweight modding', icon: Zap, category: 'modded' },
     { id: 'bedrock', name: 'Bedrock BDS', desc: 'Official Bedrock server', icon: Box, category: 'bedrock' },
 ];
@@ -89,10 +90,10 @@ export function CreateServer() {
                     paper: 'get_paper_versions',
                     bedrock: 'get_bedrock_versions',
                     forge: 'get_forge_versions',
+                    neoforge: 'get_neoforge_versions',
                     fabric: 'get_fabric_versions',
                     spigot: 'get_spigot_versions',
                     purpur: 'get_purpur_versions',
-
                 };
                 if (versionCommands[formData.type]) {
                     versions = await invoke(versionCommands[formData.type]);

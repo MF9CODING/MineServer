@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 
-export type ServerType = 'vanilla' | 'paper' | 'forge' | 'fabric' | 'bedrock' | 'nukkit' | 'spigot' | 'purpur';
+export type ServerType = 'vanilla' | 'paper' | 'forge' | 'neoforge' | 'fabric' | 'bedrock' | 'nukkit' | 'spigot' | 'purpur';
 
 export type ServerStatus = 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
 

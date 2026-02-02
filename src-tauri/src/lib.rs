@@ -49,6 +49,7 @@ pub fn run() {
             commands::versions::get_paper_versions,
             commands::versions::get_bedrock_versions,
             commands::versions::get_forge_versions,
+            commands::versions::get_neoforge_versions,
             commands::versions::get_fabric_versions,
             commands::versions::get_spigot_versions,
             commands::versions::get_purpur_versions,

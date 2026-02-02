@@ -171,6 +171,61 @@ pub async fn get_forge_versions() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub async fn get_neoforge_versions() -> Result<Vec<String>, String> {
+    // NeoForge uses Maven repository for versions
+    // API: https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge
+    // Or simpler: fetch the loader versions from their meta API
+    
+    let client = Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    let mut versions = Vec::new();
+    
+    // NeoForge versions API
+    if let Ok(resp) = client
+        .get("https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge")
+        .send()
+        .await
+    {
+        if let Ok(parsed) = resp.json::<serde_json::Value>().await {
+            // Response: { "versions": ["21.5.0-beta", "21.4.100", ...] }
+            if let Some(version_list) = parsed.get("versions").and_then(|v| v.as_array()) {
+                // Get first 20, filter out beta/alpha
+                for v in version_list.iter().rev().take(50) {
+                    if let Some(v_str) = v.as_str() {
+                        // Only include stable versions (no -beta, -alpha)
+                        if !v_str.contains("-beta") && !v_str.contains("-alpha") {
+                            // NeoForge uses format like "21.4.100" where first number = MC version (21 = 1.21)
+                            // Convert to more readable format
+                            versions.push(v_str.to_string());
+                            if versions.len() >= 20 { break; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback
+    if versions.is_empty() {
+        versions = vec![
+            "21.4.100".to_string(),  // 1.21.4
+            "21.3.100".to_string(),  // 1.21.3
+            "21.1.100".to_string(),  // 1.21.1
+            "21.0.167".to_string(),  // 1.21
+            "20.6.119".to_string(),  // 1.20.6
+            "20.4.234".to_string(),  // 1.20.4
+            "20.2.86".to_string(),   // 1.20.2
+            "20.1.113".to_string(),  // 1.20.1
+        ];
+    }
+    
+    Ok(versions)
+}
+
+#[tauri::command]
 pub async fn get_fabric_versions() -> Result<Vec<String>, String> {
     // Fabric uses their own meta API
     let client = Client::builder()

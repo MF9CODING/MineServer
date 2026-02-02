@@ -246,6 +246,15 @@ async fn resolve_url(client: &Client, server_type: &str, version: &str) -> Resul
                 version, forge_version, version, forge_version
             ))
         },
+        "neoforge" => {
+            // NeoForge installer download
+            // Format: https://maven.neoforged.net/releases/net/neoforged/neoforge/{version}/neoforge-{version}-installer.jar
+            // Version is like "21.4.100" (not MC version)
+            Ok(format!(
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/{}/neoforge-{}-installer.jar",
+                version, version
+            ))
+        },
         "fabric" => {
             // Fabric server launcher - fetch latest loader and installer versions
             let loader_resp = client.get("https://meta.fabricmc.net/v2/versions/loader")
