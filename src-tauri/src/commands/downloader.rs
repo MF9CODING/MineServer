@@ -160,7 +160,59 @@ pub async fn download_server(
 
         // Remove zip
         std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
+    } else if server_type == "neoforge" || server_type == "forge" {
+        // NeoForge/Forge: Run the installer automatically
+        let _ = window.emit("download-progress", DownloadProgress {
+            percentage: 95,
+            current: 95,
+            total: 100,
+        });
+        let _ = window.emit("server-log", format!("[{}] Running installer...", server_type.to_uppercase()));
+        
+        // The downloaded file is the installer jar
+        // Run: java -jar <installer>.jar --installServer
+        use std::process::Command;
+        
+        let java_path = "java"; // Use system Java, could be configurable later
+        
+        // Run installer
+        let output = Command::new(java_path)
+            .arg("-jar")
+            .arg(&file_path)
+            .arg("--installServer")
+            .current_dir(&path)
+            .output();
+        
+        match output {
+            Ok(result) => {
+                if result.status.success() {
+                    let _ = window.emit("server-log", format!("[{}] Installer completed successfully!", server_type.to_uppercase()));
+                    
+                    // Clean up installer jar (optional, keep for re-install)
+                    // let _ = std::fs::remove_file(&file_path);
+                } else {
+                    let stderr = String::from_utf8_lossy(&result.stderr);
+                    let _ = window.emit("server-log", format!("[{}] Installer warning: {}", server_type.to_uppercase(), stderr));
+                    // Don't fail - the installer might have worked partially
+                }
+            },
+            Err(e) => {
+                // Java not found or other issue - log but don't fail
+                let _ = window.emit("server-log", format!("[{}] Could not run installer automatically ({}). Please run manually with: java -jar {} --installServer", server_type.to_uppercase(), e, file_name));
+            }
+        }
+        
+        // Create EULA
+        let eula_path = path.join("eula.txt");
+        let mut eula_file = File::create(eula_path).map_err(|e| e.to_string())?;
+        eula_file.write_all(b"eula=true").map_err(|e| e.to_string())?;
+        
+        // Create mods folder for convenience
+        let mods_path = path.join("mods");
+        let _ = std::fs::create_dir_all(mods_path);
+        
     } else {
+        // Standard servers (Vanilla, Paper, Spigot, Fabric, Purpur)
         // EULA
         let eula_path = path.join("eula.txt");
         let mut eula_file = File::create(eula_path).map_err(|e| e.to_string())?;

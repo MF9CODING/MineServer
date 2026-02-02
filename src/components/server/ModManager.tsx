@@ -77,7 +77,8 @@ export function ModManager({ server }: ModManagerProps) {
     const isBedrock = ['bedrock', 'nukkit'].includes(server.type.toLowerCase());
     const isPluginServer = ['spigot', 'paper', 'purpur', 'bungeecord', 'velocity', 'nukkit'].includes(server.type.toLowerCase());
     const addonType = isPluginServer ? 'Plugins' : 'Mods';
-    const loaderType = server.type === 'forge' ? 'forge' : 'fabric';
+    // NeoForge uses 'neoforge' loader on Modrinth, Forge uses 'forge', Fabric uses 'fabric'
+    const loaderType = server.type === 'forge' ? 'forge' : server.type === 'neoforge' ? 'neoforge' : 'fabric';
 
     const availableSources = SOURCES.filter(s => {
         if (s.bedrockOnly && !isBedrock) return false;
