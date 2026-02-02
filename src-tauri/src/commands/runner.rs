@@ -57,7 +57,47 @@ fn spawn_process_internal(
 
     let mut cmd;
     
-    if config.jar_file.ends_with(".jar") || config.jar_file.ends_with(".phar") {
+    // NeoForge/Forge Support: Check for run.bat/run.sh scripts first
+    let run_script_win = server_path.join("run.bat");
+    let run_script_unix = server_path.join("run.sh");
+    
+    let has_run_script = if cfg!(target_os = "windows") {
+        run_script_win.exists()
+    } else {
+        run_script_unix.exists()
+    };
+    
+    if has_run_script {
+        // NeoForge/Forge server - use the bundled run script
+        let _ = window.emit("debug-log", format!("[NeoForge/Forge] Detected run script, using it to start server"));
+        
+        #[cfg(target_os = "windows")]
+        {
+            cmd = Command::new("cmd");
+            cmd.arg("/C").arg("run.bat");
+        }
+        
+        #[cfg(not(target_os = "windows"))]
+        {
+            cmd = Command::new("bash");
+            cmd.arg("run.sh");
+        }
+        
+        cmd.current_dir(server_path);
+        
+        // Set JVM memory args via environment variable (NeoForge respects this)
+        cmd.env("JVM_ARGS", format!("-Xmx{}M -Xms{}M", config.ram, config.ram));
+        
+        // Also set JAVA_TOOL_OPTIONS as fallback
+        let mut java_opts = format!("-Xmx{}M -Xms{}M", config.ram, config.ram);
+        if let Some(flags) = &config.startup_flags {
+            java_opts.push_str(" ");
+            java_opts.push_str(flags);
+        }
+        // Note: We set env but some scripts override. User can edit user_jvm_args.txt for persistent settings.
+        
+    } else if config.jar_file.ends_with(".jar") || config.jar_file.ends_with(".phar") {
+        // Standard server (Vanilla, Paper, Spigot, Fabric, PocketMine)
         let bin = if config.jar_file.ends_with(".phar") { "php" } else { "java" };
         let java_bin = config.java_path.clone().unwrap_or_else(|| bin.to_string());
         
@@ -93,7 +133,7 @@ fn spawn_process_internal(
              cmd.arg("-jar").arg(&config.jar_file).arg("nogui");
         }
     } else {
-        // Binary execution
+        // Binary execution (Bedrock, custom executables)
         cmd = Command::new(server_path.join(&config.jar_file));
         cmd.current_dir(server_path);
     }
