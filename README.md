@@ -76,12 +76,37 @@ We support the best high-performance server software out of the box:
 | **Vanilla** | Java | 🍦 Pure Experience | ✅ Supported |
 | **Fabric** | Java | 🛠️ Mods (Lightweight) | ✅ Supported |
 | **Forge** | Java | 🏗️ Heavy Modpacks | ✅ Supported |
+| **NeoForge** | Java | ⚡ Modern Forge Fork (1.20.1+) | ✅ **NEW** |
 | **Bedrock** | Bedrock | 📱 Cross-play w/ Consoles | ✅ Supported |
 | **NukkitX** | Bedrock | 🔌 Bedrock with Plugins | ✅ Supported |
 
 ---
 
-## � Screenshots
+## 📋 Changelog
+
+### v1.0.0 (February 2026) - Major Release 🎉
+
+#### ✨ New Features
+- **NeoForge Support**: Full support for NeoForge modded servers (modern Forge fork for 1.20.1+)
+  - One-click installation with automatic installer execution
+  - Integrated Mods tab with Modrinth search using `neoforge` loader filter
+  - Auto-creates `mods` folder during server setup
+- **Smart Run Script Detection**: NeoForge/Forge servers now automatically use `run.bat`/`run.sh` scripts
+- **JVM Args via Environment**: Custom Java flags passed via `JVM_ARGS` environment variable for modded servers
+
+#### 🐛 Bug Fixes
+- Fixed compilation errors in scheduler thread lifetime management
+- Fixed `window.emit` type mismatches in server runner
+- Resolved unused import warnings throughout codebase
+
+#### 🔧 Improvements
+- Updated `ServerType` union to include `neoforge`
+- ModManager now correctly detects NeoForge loader for Modrinth mod searches
+- Mods tab now visible for NeoForge servers in Server Panel
+
+---
+
+## 📸 Screenshots
 
 *(Screenshots coming soon - Imagine a sleek, dark-themed UI that looks like it's from 2030)*
 
